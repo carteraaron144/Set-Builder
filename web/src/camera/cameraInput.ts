@@ -131,7 +131,9 @@ export class CameraInput {
   }
 
   private readonly onKeyUp = (e: KeyboardEvent) => {
-    this.held.delete(e.code)
+    // macOS sends no keyup for keys released while Cmd was down, so anything still held may be stale.
+    if (e.key === 'Meta') this.held.clear()
+    else this.held.delete(e.code)
   }
 
   private readonly onVisibilityChange = () => {

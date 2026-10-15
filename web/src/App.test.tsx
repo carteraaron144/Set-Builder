@@ -5,8 +5,13 @@ import App from './App'
 import { useEditorStore } from './editor/editorStore'
 import { MESSAGES } from './editor/sceneActions'
 
+const viewportMock = vi.hoisted(() => ({ fail: false }))
+
 vi.mock('./viewport/Viewport', () => ({
-  Viewport: () => <div data-testid="viewport" />,
+  Viewport: () => {
+    if (viewportMock.fail) throw new Error('GPU device lost')
+    return <div data-testid="viewport" />
+  },
 }))
 
 function beforeUnload() {
@@ -16,6 +21,7 @@ function beforeUnload() {
 }
 
 beforeEach(() => {
+  viewportMock.fail = false
   useEditorStore.setState(useEditorStore.getInitialState(), true)
 })
 
@@ -62,5 +68,16 @@ describe('App', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Open' }))
     expect(screen.getByRole('dialog', { name: 'Open scene' })).toBeInTheDocument()
     expect(await screen.findByText(/storage is unavailable/i)).toBeInTheDocument()
+  })
+
+  it('keeps the editor and its unsaved-changes guard when the renderer fails', () => {
+    viewportMock.fail = true
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    act(() => useEditorStore.getState().rename('Edited'))
+    render(<App />)
+    expect(screen.getByRole('alert')).toHaveTextContent("Set Builder couldn't start 3D rendering in this browser.")
+    expect(screen.getByRole('textbox', { name: 'Scene name' })).toHaveValue('Edited')
+    expect(beforeUnload().defaultPrevented).toBe(true)
+    vi.mocked(console.error).mockRestore()
   })
 })

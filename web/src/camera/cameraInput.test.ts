@@ -97,6 +97,16 @@ describe('CameraInput keyboard', () => {
     expectState(state, start)
   })
 
+  it('releases held keys after a Cmd chord (macOS sends no keyup for keys released while Cmd is down)', () => {
+    key('keydown', 'KeyW')
+    window.dispatchEvent(new KeyboardEvent('keydown', { code: 'MetaLeft', key: 'Meta', metaKey: true }))
+    window.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyS', key: 's', metaKey: true }))
+    // KeyW is released while Cmd is held: no keyup arrives.
+    window.dispatchEvent(new KeyboardEvent('keyup', { code: 'MetaLeft', key: 'Meta' }))
+    input.update(1)
+    expectState(state, start)
+  })
+
   it('releases held keys when the window loses focus', () => {
     key('keydown', 'KeyW')
     window.dispatchEvent(new Event('blur'))

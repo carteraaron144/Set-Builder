@@ -13,6 +13,7 @@ import {
 } from './editor/sceneActions'
 import { TopBar } from './editor/TopBar'
 import { Viewport } from './viewport/Viewport'
+import { ViewportErrorBoundary } from './viewport/ViewportErrorBoundary'
 
 type Dialog = 'new' | 'open' | null
 
@@ -58,7 +59,9 @@ export default function App() {
         onUpload={(file) => void uploadSceneFile(deps, file)}
       />
       <main className="viewport-area">
-        <Viewport scene={scene} onBackend={setRenderBackend} />
+        <ViewportErrorBoundary>
+          <Viewport scene={scene} onBackend={setRenderBackend} />
+        </ViewportErrorBoundary>
       </main>
       {dialog === 'new' && (
         <NewSceneDialog
