@@ -105,3 +105,24 @@ describe('editor shortcuts', () => {
     expect(same()).toBe(false)
   })
 })
+
+describe('editor shortcuts with brush panel controls focused', () => {
+  beforeEach(() => {
+    h = { save: vi.fn(), undo: vi.fn(), redo: vi.fn(), resizeBrush: vi.fn<(f: number) => void>(), deselectTool: vi.fn() }
+    uninstall = installEditorShortcuts(window, h)
+  })
+  afterEach(() => uninstall())
+
+  it.each(['range', 'radio', 'checkbox'])('still works when a %s input has focus', (type) => {
+    const control = document.createElement('input')
+    control.type = type
+    document.body.appendChild(control)
+    press({ key: 'z', metaKey: true }, control)
+    press({ key: ']' }, control)
+    press({ key: 'Escape' }, control)
+    expect(h.undo).toHaveBeenCalledTimes(1)
+    expect(h.resizeBrush).toHaveBeenCalledWith(1.25)
+    expect(h.deselectTool).toHaveBeenCalledTimes(1)
+    control.remove()
+  })
+})
