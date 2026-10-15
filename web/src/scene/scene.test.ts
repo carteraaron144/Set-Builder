@@ -7,7 +7,7 @@ describe('createScene', () => {
   it('builds a scene from explicit values', () => {
     expect(createScene({ size: 128, now: NOW, id: 'a', seed: 7 })).toEqual({
       formatVersion: 2,
-      generatorVersion: 1,
+      generatorVersion: 2,
       id: 'a',
       name: 'Untitled scene',
       size: 128,
@@ -38,7 +38,7 @@ describe('createScene', () => {
   it('exposes the sizes and format version', () => {
     expect(SCENE_SIZES).toEqual([64, 128, 256])
     expect(SCENE_FORMAT_VERSION).toBe(2)
-    expect(GENERATOR_VERSION).toBe(1)
+    expect(GENERATOR_VERSION).toBe(2)
   })
 })
 

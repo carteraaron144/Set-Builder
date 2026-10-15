@@ -5,7 +5,7 @@ export const SCENE_SIZES: readonly SceneSize[] = [64, 128, 256]
 export const SCENE_FORMAT_VERSION = 2
 
 /** Recorded per scene so a generator update can't silently change old scenes. */
-export const GENERATOR_VERSION = 1
+export const GENERATOR_VERSION = 2
 
 export const DEFAULT_SCENE_NAME = 'Untitled scene'
 export const MAX_SCENE_NAME_LENGTH = 80

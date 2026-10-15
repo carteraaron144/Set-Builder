@@ -65,9 +65,14 @@ describe('scene file', () => {
   it('opens a v1 file as flat meadow', () => {
     const { generatorVersion: _g, ...v1 } = { ...scene, formatVersion: 1 }
     const read = readSceneFile(zipWith({ 'scene.json': JSON.stringify(v1) }))
-    expect(read.scene).toEqual({ ...scene, formatVersion: 2, generatorVersion: 1 })
+    expect(read.scene).toEqual({ ...scene, formatVersion: 2, generatorVersion: 2 })
     expect(same(read.layers.heights.data, createFlatLayers(64).heights.data)).toBe(true)
     expect(same(read.layers.biomes.data, createFlatLayers(64).biomes.data)).toBe(true)
+  })
+
+  it('opens a generator-1 scene as generator 2', () => {
+    const read = readSceneFile(v2Zip({ 'scene.json': JSON.stringify({ ...scene, generatorVersion: 1 }) }))
+    expect(read.scene.generatorVersion).toBe(2)
   })
 
   it('rejects bytes that are not a zip', () => {

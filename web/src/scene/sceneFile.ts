@@ -71,7 +71,8 @@ export function parseScene(data: unknown): Scene {
   }
   const result = v2Schema.safeParse(data)
   if (!result.success) throw new SceneFileError('invalid-scene', result.error.message)
-  return result.data as Scene
+  // Generator 1 made terrain only; generator 2 adds slope bands and scatter, so older scenes upgrade in place.
+  return { ...result.data, generatorVersion: Math.max(result.data.generatorVersion, 2) } as Scene
 }
 
 /**

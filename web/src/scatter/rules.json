@@ -1,0 +1,306 @@
+{
+  "maxInstances": 100000,
+  "rules": [
+    {
+      "asset": "setbuilder-basics/pillar-cluster-5",
+      "placement": "face",
+      "biome": "any",
+      "density": 0.2,
+      "minSpacing": 1.2,
+      "scale": [
+        0.9,
+        1.3
+      ],
+      "maxTiltDeg": 8,
+      "maxSlopeDeg": 90,
+      "minHeight": -32,
+      "maxHeight": 64,
+      "blocking": true,
+      "castShadow": true,
+      "minSlopeDeg": 60,
+      "minWallHeight": 3,
+      "sinkDepth": 0.3
+    },
+    {
+      "asset": "setbuilder-basics/pillar-cluster-3",
+      "placement": "face",
+      "biome": "any",
+      "density": 0.2,
+      "minSpacing": 1.0,
+      "scale": [
+        0.9,
+        1.3
+      ],
+      "maxTiltDeg": 8,
+      "maxSlopeDeg": 90,
+      "minHeight": -32,
+      "maxHeight": 64,
+      "blocking": true,
+      "castShadow": true,
+      "minSlopeDeg": 60,
+      "minWallHeight": 3,
+      "sinkDepth": 0.3
+    },
+    {
+      "asset": "setbuilder-basics/pillar-pair",
+      "placement": "face",
+      "biome": "any",
+      "density": 0.15,
+      "minSpacing": 0.9,
+      "scale": [
+        0.9,
+        1.2
+      ],
+      "maxTiltDeg": 8,
+      "maxSlopeDeg": 90,
+      "minHeight": -32,
+      "maxHeight": 64,
+      "blocking": true,
+      "castShadow": true,
+      "minSlopeDeg": 60,
+      "minWallHeight": 3,
+      "sinkDepth": 0.3
+    },
+    {
+      "asset": "setbuilder-basics/pillar-single",
+      "placement": "face",
+      "biome": "any",
+      "density": 0.25,
+      "minSpacing": 0.8,
+      "scale": [
+        0.8,
+        1.2
+      ],
+      "maxTiltDeg": 8,
+      "maxSlopeDeg": 90,
+      "minHeight": -32,
+      "maxHeight": 64,
+      "blocking": true,
+      "castShadow": true,
+      "minSlopeDeg": 60,
+      "minWallHeight": 3,
+      "sinkDepth": 0.3
+    },
+    {
+      "asset": "setbuilder-basics/pine",
+      "placement": "ground",
+      "biome": "forest",
+      "density": 0.02,
+      "minSpacing": 5,
+      "scale": [
+        0.8,
+        1.25
+      ],
+      "maxTiltDeg": 0,
+      "maxSlopeDeg": 30,
+      "minHeight": -32,
+      "maxHeight": 64,
+      "blocking": true,
+      "castShadow": true
+    },
+    {
+      "asset": "setbuilder-basics/broadleaf",
+      "placement": "ground",
+      "biome": "forest",
+      "density": 0.008,
+      "minSpacing": 6,
+      "scale": [
+        0.8,
+        1.25
+      ],
+      "maxTiltDeg": 0,
+      "maxSlopeDeg": 30,
+      "minHeight": -32,
+      "maxHeight": 64,
+      "blocking": true,
+      "castShadow": true
+    },
+    {
+      "asset": "setbuilder-basics/broadleaf",
+      "placement": "ground",
+      "biome": "meadow",
+      "density": 0.0015,
+      "minSpacing": 8,
+      "scale": [
+        0.8,
+        1.25
+      ],
+      "maxTiltDeg": 0,
+      "maxSlopeDeg": 30,
+      "minHeight": -32,
+      "maxHeight": 64,
+      "blocking": true,
+      "castShadow": true
+    },
+    {
+      "asset": "setbuilder-basics/broadleaf",
+      "placement": "ground",
+      "biome": "swamp",
+      "density": 0.001,
+      "minSpacing": 10,
+      "scale": [
+        0.6,
+        0.9
+      ],
+      "maxTiltDeg": 0,
+      "maxSlopeDeg": 30,
+      "minHeight": -32,
+      "maxHeight": 64,
+      "blocking": true,
+      "castShadow": true
+    },
+    {
+      "asset": "setbuilder-basics/rock-large",
+      "placement": "ground",
+      "biome": "rocky",
+      "density": 0.02,
+      "minSpacing": 3,
+      "scale": [
+        0.8,
+        1.25
+      ],
+      "maxTiltDeg": 10,
+      "maxSlopeDeg": 60,
+      "minHeight": -32,
+      "maxHeight": 64,
+      "blocking": true,
+      "castShadow": true
+    },
+    {
+      "asset": "setbuilder-basics/rock-small",
+      "placement": "ground",
+      "biome": "rocky",
+      "density": 0.05,
+      "minSpacing": 1.5,
+      "scale": [
+        0.8,
+        1.25
+      ],
+      "maxTiltDeg": 10,
+      "maxSlopeDeg": 60,
+      "minHeight": -32,
+      "maxHeight": 64,
+      "blocking": true,
+      "castShadow": true
+    },
+    {
+      "asset": "setbuilder-basics/bush",
+      "placement": "ground",
+      "biome": "meadow",
+      "density": 0.004,
+      "minSpacing": 4,
+      "scale": [
+        0.8,
+        1.25
+      ],
+      "maxTiltDeg": 0,
+      "maxSlopeDeg": 30,
+      "minHeight": -32,
+      "maxHeight": 64,
+      "blocking": true,
+      "castShadow": true
+    },
+    {
+      "asset": "setbuilder-basics/bush",
+      "placement": "ground",
+      "biome": "forest",
+      "density": 0.01,
+      "minSpacing": 3,
+      "scale": [
+        0.8,
+        1.25
+      ],
+      "maxTiltDeg": 0,
+      "maxSlopeDeg": 30,
+      "minHeight": -32,
+      "maxHeight": 64,
+      "blocking": true,
+      "castShadow": true
+    },
+    {
+      "asset": "setbuilder-basics/bush",
+      "placement": "ground",
+      "biome": "swamp",
+      "density": 0.005,
+      "minSpacing": 4,
+      "scale": [
+        0.8,
+        1.25
+      ],
+      "maxTiltDeg": 0,
+      "maxSlopeDeg": 30,
+      "minHeight": -32,
+      "maxHeight": 64,
+      "blocking": true,
+      "castShadow": true
+    },
+    {
+      "asset": "setbuilder-basics/grass-tuft",
+      "placement": "ground",
+      "biome": "meadow",
+      "density": 0.2,
+      "minSpacing": 1.5,
+      "scale": [
+        0.8,
+        1.25
+      ],
+      "maxTiltDeg": 10,
+      "maxSlopeDeg": 40,
+      "minHeight": -32,
+      "maxHeight": 64,
+      "blocking": false,
+      "castShadow": false
+    },
+    {
+      "asset": "setbuilder-basics/grass-tuft",
+      "placement": "ground",
+      "biome": "forest",
+      "density": 0.05,
+      "minSpacing": 2,
+      "scale": [
+        0.8,
+        1.25
+      ],
+      "maxTiltDeg": 10,
+      "maxSlopeDeg": 40,
+      "minHeight": -32,
+      "maxHeight": 64,
+      "blocking": false,
+      "castShadow": false
+    },
+    {
+      "asset": "setbuilder-basics/grass-tuft",
+      "placement": "ground",
+      "biome": "rocky",
+      "density": 0.03,
+      "minSpacing": 2,
+      "scale": [
+        0.8,
+        1.25
+      ],
+      "maxTiltDeg": 10,
+      "maxSlopeDeg": 40,
+      "minHeight": -32,
+      "maxHeight": 64,
+      "blocking": false,
+      "castShadow": false
+    },
+    {
+      "asset": "setbuilder-basics/reeds",
+      "placement": "ground",
+      "biome": "swamp",
+      "density": 0.1,
+      "minSpacing": 1.2,
+      "scale": [
+        0.8,
+        1.25
+      ],
+      "maxTiltDeg": 0,
+      "maxSlopeDeg": 40,
+      "minHeight": -32,
+      "maxHeight": 2,
+      "blocking": false,
+      "castShadow": false
+    }
+  ]
+}
