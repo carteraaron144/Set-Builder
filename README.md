@@ -41,6 +41,23 @@ Terrain modes are raise, lower, smooth, flatten (to the height where the stroke 
 heights to multiples of the Step height, 0.5–5 m, for stepped earthen mounds). Paint brushes the
 meadow, forest, rocky and swamp biomes; slopes shade to earth from 30° and to rock from 60° automatically.
 
+## Scatter and export
+
+Painted biomes fill with trees, rocks, bushes, grass and reeds, and steep cliffs (60°+, 3 m+ tall) with rock pillars,
+from the asset packs in `packs/` (the generated `setbuilder-basics` pack is CC0; rebuild it with `cd web && npm run
+make-pack`). Scatter rules and colours are data: `web/src/scatter/rules.json`, `materials.json`. Nothing generated is
+saved; scenes store only their painted layers and seed, and scatter is regenerated identically on load.
+
+**Export** (top bar) downloads the generated scene as glTF 2.0 (`.glb`), metres, Y-up: one node per element (sharing
+meshes), one mesh per chunk, or one merged mesh; optional `-col` collision meshes (terrain at 1 m, tree trunks, rock and
+cliff boxes); grass and reeds are optional. No normals are written, so importers shade faces flat. Measured for a
+256 m scene with four biomes and a cliff (~7,000 elements): 14.3 MB in 0.2 s (default), 15.4 MB per chunk, 19.4 MB
+merged. Check an export in Blender (5.2 wires the terrain's vertex colours automatically):
+
+```bash
+/Applications/Blender.app/Contents/MacOS/Blender -b --python scripts/blender-check.py -- scene.glb 256
+```
+
 ## Test
 
 - `cd web && npm test`

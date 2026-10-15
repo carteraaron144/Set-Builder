@@ -3,6 +3,7 @@ import { normalizeSceneName } from '../scene/scene'
 import { useEditorStore } from './editorStore'
 
 export interface TopBarProps {
+  onExport?(): void
   onNew(): void
   onOpen(): void
   onSave(): void
@@ -10,7 +11,7 @@ export interface TopBarProps {
   onUpload(file: File): void
 }
 
-export function TopBar({ onNew, onOpen, onSave, onDownload, onUpload }: TopBarProps) {
+export function TopBar({ onNew, onOpen, onSave, onDownload, onUpload, onExport }: TopBarProps) {
   const scene = useEditorStore((s) => s.scene)
   const dirty = useEditorStore((s) => s.dirty)
   const renderBackend = useEditorStore((s) => s.renderBackend)
@@ -62,6 +63,11 @@ export function TopBar({ onNew, onOpen, onSave, onDownload, onUpload }: TopBarPr
       <button type="button" onClick={() => fileInput.current?.click()} title="Open a .setbuilder project file">
         Upload
       </button>
+      {onExport && (
+        <button type="button" onClick={onExport} title="Export the generated scene as glTF (.glb)">
+          Export
+        </button>
+      )}
       <input
         ref={fileInput}
         type="file"

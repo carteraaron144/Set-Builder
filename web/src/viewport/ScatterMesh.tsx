@@ -40,12 +40,14 @@ export function ScatterMesh({ terrain, scene, library }: { terrain: TerrainEdito
       },
     })
     managerRef.current = manager
+    useEditorStore.getState().setScatterManager(manager)
     applied.current = -1
     const owned = slots.current
     return () => {
       manager.dispose()
       runner.dispose()
       if (managerRef.current === manager) managerRef.current = null
+      if (useEditorStore.getState().scatterManager === manager) useEditorStore.getState().setScatterManager(null)
       for (const s of owned.values()) {
         s.mesh.removeFromParent()
         s.mesh.dispose()

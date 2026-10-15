@@ -6,8 +6,10 @@ import { createScene, type Scene } from '../scene/scene'
 import { readSceneFile, SceneFileError, writeSceneFile } from '../scene/sceneFile'
 import { createFlatLayers } from '../terrain/layers'
 import { createEditorStore } from './editorStore'
+import { EXPORT_DEFAULTS } from '../export/exportScene'
 import {
   downloadCurrent,
+  exportCurrent,
   loadInitialScene,
   MESSAGES,
   newScene,
@@ -305,5 +307,25 @@ describe('terrain layers in scene actions', () => {
     expect(same(stored!, before)).toBe(true)
     expect(store.getState().dirty).toBe(true)
     expect(store.getState().message).toEqual({ kind: 'info', text: 'Saved' })
+  })
+})
+
+describe('exportCurrent', () => {
+  it('downloads <slug>.glb and reports its size', async () => {
+    const { store, deps, download } = setup()
+    const writeGlb = vi.fn(async () => new Uint8Array(3 * 1024 * 1024))
+    await exportCurrent({ ...deps, library: null, scatter: null, writeGlb }, EXPORT_DEFAULTS)
+    expect(download).toHaveBeenCalledTimes(1)
+    expect(download.mock.calls[0][0]).toBe('my-scene.glb')
+    expect(store.getState().message).toEqual({ kind: 'info', text: 'Exported my-scene.glb (3.0 MB)' })
+  })
+
+  it('reports an exporter failure and leaves the scene untouched', async () => {
+    const { store, deps, download } = setup()
+    const before = store.getState().scene
+    await exportCurrent({ ...deps, library: null, scatter: null, writeGlb: async () => Promise.reject(new Error('out of memory')) }, EXPORT_DEFAULTS)
+    expect(download).not.toHaveBeenCalled()
+    expect(store.getState().message).toEqual({ kind: 'error', text: "Couldn't export the scene: out of memory" })
+    expect(store.getState().scene).toBe(before)
   })
 })

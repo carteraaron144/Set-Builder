@@ -3,6 +3,12 @@ import type { SceneStore } from '../persistence/sceneStore'
 import { createScene, type SceneSize } from '../scene/scene'
 import { readSceneFile, SCENE_FILE_EXTENSION, SceneFileError, writeSceneFile } from '../scene/sceneFile'
 import { cloneLayers } from '../terrain/layers'
+import type { Object3D } from 'three'
+import type { AssetLibrary } from '../assets/assetLibrary'
+import { writeGlb as defaultWriteGlb } from '../export/exportGlb'
+import { buildExportScene, type ExportOptions } from '../export/exportScene'
+import type { ScatterRules } from '../scatter/rules'
+import type { Instance } from '../scatter/scatter'
 import type { EditorState } from './editorStore'
 
 export interface ActionDeps {
@@ -94,14 +100,41 @@ export async function uploadSceneFile(deps: ActionDeps, file: File): Promise<voi
   setMessage(null)
 }
 
-export function sceneFilename(name: string): string {
+function slugify(name: string): string {
   const slug = name
     .normalize('NFKD')
     .replace(/[̀-ͯ]/g, '')
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '')
-  return (slug || 'scene') + SCENE_FILE_EXTENSION
+  return slug || 'scene'
+}
+
+export function sceneFilename(name: string): string {
+  return slugify(name) + SCENE_FILE_EXTENSION
+}
+
+export interface ExportDeps extends ActionDeps {
+  library: AssetLibrary | null
+  /** The live scatter (null when assets didn't load): export includes what it has generated. */
+  scatter: { instancesByRule(): Instance[][]; ruleList: ScatterRules } | null
+  writeGlb?: (root: Object3D) => Promise<Uint8Array>
+}
+
+/** Builds the export scene from the current data and downloads it as <slug>.glb. */
+export async function exportCurrent(deps: ExportDeps, o: ExportOptions): Promise<void> {
+  const { scene, terrain, setMessage } = deps.store.getState()
+  const filename = slugify(scene.name) + '.glb'
+  try {
+    const library = deps.library ?? { assets: new Map(), materials: {} as AssetLibrary['materials'], packs: [], problems: [] }
+    const rules = deps.scatter?.ruleList ?? { maxInstances: 0, rules: [] }
+    const root = buildExportScene({ scene, layers: terrain.layers, instancesByRule: deps.scatter?.instancesByRule() ?? [], rules, library }, o)
+    const bytes = await (deps.writeGlb ?? defaultWriteGlb)(root)
+    deps.download(filename, bytes)
+    setMessage({ kind: 'info', text: `Exported ${filename} (${(bytes.byteLength / 1024 / 1024).toFixed(1)} MB)` })
+  } catch (e) {
+    setMessage({ kind: 'error', text: `Couldn't export the scene: ${(e as Error).message}` })
+  }
 }
 
 export function downloadCurrent(deps: ActionDeps): void {

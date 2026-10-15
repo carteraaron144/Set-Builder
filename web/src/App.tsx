@@ -4,10 +4,12 @@ import { loadAssetLibrary, type AssetLibrary } from './assets/assetLibrary'
 import { browserDeps } from './editor/browserDeps'
 import { useEditorStore } from './editor/editorStore'
 import { BrushPanel } from './editor/BrushPanel'
+import { ExportDialog } from './editor/ExportDialog'
 import { NewSceneDialog } from './editor/NewSceneDialog'
 import { OpenSceneDialog } from './editor/OpenSceneDialog'
 import {
   downloadCurrent,
+  exportCurrent,
   loadInitialScene,
   newScene,
   openScene,
@@ -20,7 +22,7 @@ import { TopBar } from './editor/TopBar'
 import { Viewport } from './viewport/Viewport'
 import { ViewportErrorBoundary } from './viewport/ViewportErrorBoundary'
 
-type Dialog = 'new' | 'open' | null
+type Dialog = 'new' | 'open' | 'export' | null
 
 export const SCATTER_ASSETS_MESSAGE = "Scatter assets couldn't be loaded; showing terrain only."
 
@@ -82,6 +84,7 @@ export default function App() {
         onSave={() => void saveCurrent(deps)}
         onDownload={() => downloadCurrent(deps)}
         onUpload={(file) => void uploadSceneFile(deps, file)}
+        onExport={() => setDialog('export')}
       />
       <main className="viewport-area">
         <ViewportErrorBoundary>
@@ -96,6 +99,16 @@ export default function App() {
           onCreate={(name, size) => {
             setDialog(null)
             newScene(deps, name, size)
+          }}
+        />
+      )}
+      {dialog === 'export' && (
+        <ExportDialog
+          onCancel={() => setDialog(null)}
+          onExport={async (options) => {
+            const scatter = useEditorStore.getState().scatterManager
+            await exportCurrent({ ...deps, library, scatter }, options)
+            setDialog(null)
           }}
         />
       )}

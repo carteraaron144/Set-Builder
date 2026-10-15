@@ -10,6 +10,7 @@ import {
 } from '../terrain/brush'
 import { createFlatLayers, type BiomeId, type TerrainLayers } from '../terrain/layers'
 import { TerrainEditor } from '../terrain/terrainEditor'
+import type { ScatterManager } from '../scatter/scatterManager'
 import type { RenderBackend } from '../viewport/renderBackend'
 
 export type Message = { kind: 'error' | 'info'; text: string } | null
@@ -33,6 +34,8 @@ export interface EditorState {
   invertToggle: boolean
   /** Scattered elements shown in the viewport. */
   scatterVisible: boolean
+  /** The viewport's live scatter (export reads its instances); null when none is running. */
+  scatterManager: ScatterManager | null
   /** Terrace step height in metres (0.5–5). */
   terraceStep: number
   canUndo: boolean
@@ -52,6 +55,7 @@ export interface EditorState {
   setInvertToggle(v: boolean): void
   setTerraceStep(m: number): void
   setScatterVisible(v: boolean): void
+  setScatterManager(m: ScatterManager | null): void
   undo(): void
   redo(): void
 }
@@ -84,6 +88,7 @@ const initializer =
       invertToggle: false,
       terraceStep: 1.5,
       scatterVisible: true,
+      scatterManager: null,
       canUndo: false,
       canRedo: false,
       replaceScene: (next, layers) =>
@@ -120,6 +125,7 @@ const initializer =
       setInvertToggle: (invertToggle) => set({ invertToggle }),
       setTerraceStep: (m) => set({ terraceStep: clamp(m, 0.5, 5) }),
       setScatterVisible: (scatterVisible) => set({ scatterVisible }),
+      setScatterManager: (scatterManager) => set({ scatterManager }),
       undo: () => {
         get().terrain.undo()
       },
