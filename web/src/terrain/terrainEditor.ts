@@ -13,6 +13,8 @@ interface Stroke {
   flattenTo: number
   snapshot: Float32Array | Uint8Array
   rect: Rect | null
+  /** Paint strokes blend in floats so slow (low-strength, high-refresh) painting still converges. */
+  weights: Float32Array | null
   /** Undo was pressed mid-drag: ignore the rest of this drag. */
   cancelled: boolean
 }
@@ -60,6 +62,7 @@ export class TerrainEditor {
       flattenTo: at ? heightAt(this.layers.heights, at.x, at.z) : 0,
       snapshot: this.layerData(tool).slice(),
       rect: null,
+      weights: tool.tool === 'paint' ? Float32Array.from(this.layers.biomes.data, (v) => v / 255) : null,
       cancelled: false,
     }
   }
@@ -71,7 +74,7 @@ export class TerrainEditor {
     const rect =
       s.tool.tool === 'terrain'
         ? sculpt(this.layers.heights, s.tool.mode, s.brush, dab, { flattenTo: s.flattenTo, seed: this.seed })
-        : paint(this.layers.biomes, s.tool.biome, s.brush, dab)
+        : paint(this.layers.biomes, s.tool.biome, s.brush, dab, s.weights ?? undefined)
     if (!rect) return
     s.rect = union(s.rect, rect)
     this.markDirty(s.tool.tool === 'terrain' ? 'heights' : 'biomes', rect)
@@ -96,7 +99,7 @@ export class TerrainEditor {
     if (this.stroke && !this.stroke.cancelled) {
       const tool = this.stroke.tool
       this.endStroke()
-      this.stroke = { tool, brush: { radius: 0, strength: 0, falloff: 0 }, flattenTo: 0, snapshot: new Uint8Array(0), rect: null, cancelled: true }
+      this.stroke = { tool, brush: { radius: 0, strength: 0, falloff: 0 }, flattenTo: 0, snapshot: new Uint8Array(0), rect: null, weights: null, cancelled: true }
     }
     const p = this.history.undo()
     if (!p) return false

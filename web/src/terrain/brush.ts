@@ -127,8 +127,12 @@ export function sculpt(
   return rect
 }
 
-/** Paints (or with invert, erases toward meadow) one biome dab in place. */
-export function paint(m: BiomeMap, biome: BiomeId, b: BrushSettings, dab: Dab): Rect | null {
+/**
+ * Paints (or with invert, erases toward meadow) one biome dab in place.
+ * `weights` is an optional float copy of the map (4 per sample, 0..1) that the blend runs in; pass the same one for every
+ * dab of a stroke so small per-frame changes accumulate instead of being rounded away in the bytes.
+ */
+export function paint(m: BiomeMap, biome: BiomeId, b: BrushSettings, dab: Dab, weights?: Float32Array): Rect | null {
   const channel = BIOME_IDS.indexOf(biome)
   if (dab.invert && channel === 0) return null
   const rect = dabRect(m.size, m.resolution, BIOME_SPACING, dab, b.radius)
@@ -144,7 +148,7 @@ export function paint(m: BiomeMap, biome: BiomeId, b: BrushSettings, dab: Dab): 
       if (w === 0) continue
       const k = Math.min(1, BLEND_RATE * b.strength * w * dab.dt)
       const offset = (j * m.resolution + i) * 4
-      for (let c = 0; c < 4; c++) old[c] = m.data[offset + c] / 255
+      for (let c = 0; c < 4; c++) old[c] = weights ? weights[offset + c] : m.data[offset + c] / 255
       if (dab.invert) {
         for (let c = 0; c < 4; c++) target[c] = old[c]
         target[0] += target[channel]
@@ -152,11 +156,9 @@ export function paint(m: BiomeMap, biome: BiomeId, b: BrushSettings, dab: Dab): 
       } else {
         for (let c = 0; c < 4; c++) target[c] = c === channel ? 1 : 0
       }
-      quantizeWeights(
-        old.map((o, c) => o + (target[c] - o) * k),
-        m.data,
-        offset,
-      )
+      const next = old.map((o, c) => o + (target[c] - o) * k)
+      if (weights) for (let c = 0; c < 4; c++) weights[offset + c] = next[c]
+      quantizeWeights(next, m.data, offset)
     }
   }
   return rect

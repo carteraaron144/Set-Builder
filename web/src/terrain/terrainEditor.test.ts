@@ -115,3 +115,36 @@ describe('TerrainEditor strokes and undo', () => {
     expect(same(ed.layers.heights.data, afterFirst)).toBe(true)
   })
 })
+
+describe('TerrainEditor paint convergence', () => {
+  const centre = (ed: TerrainEditor) => [...ed.layers.biomes.data.subarray((32 * 65 + 32) * 4, (32 * 65 + 32) * 4 + 4)]
+
+  function paintFor(seconds: number, hz: number, strength: number) {
+    const { ed } = editor(64)
+    ed.beginStroke({ tool: 'paint', biome: 'forest' }, { radius: 8, strength, falloff: 0.5 }, { x: 0, z: 0 })
+    for (let n = 0; n < Math.round(seconds * hz); n++) ed.dab({ x: 0, z: 0 }, 1 / hz, false)
+    ed.endStroke()
+    return ed
+  }
+
+  it('reaches full coverage at low strength', () => {
+    expect(centre(paintFor(60, 60, 0.1))).toEqual([0, 255, 0, 0])
+  })
+
+  it('does not depend on the frame rate', () => {
+    const at60 = centre(paintFor(2, 60, 0.1))
+    const at144 = centre(paintFor(2, 144, 0.1))
+    expect(at60[1]).toBeGreaterThan(50)
+    expect(Math.abs(at60[1] - at144[1])).toBeLessThanOrEqual(1)
+  })
+
+  it('moves soft-edge samples too', () => {
+    const { ed } = editor(64)
+    const before = ed.layers.biomes.data.slice()
+    ed.beginStroke({ tool: 'paint', biome: 'forest' }, { radius: 8, strength: 0.5, falloff: 1 }, { x: 0, z: 0 })
+    for (let n = 0; n < 600; n++) ed.dab({ x: 0, z: 0 }, 1 / 60, false)
+    ed.endStroke()
+    const at7m = (32 * 65 + 39) * 4
+    expect(ed.layers.biomes.data[at7m + 1]).toBeGreaterThan(before[at7m + 1])
+  })
+})
