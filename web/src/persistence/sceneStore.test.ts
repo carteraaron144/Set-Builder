@@ -109,7 +109,7 @@ describe('SceneStore', () => {
     const store = await openSceneStore(dbName)
     expect((await store.list()).map((s) => s.id)).toEqual(['m0'])
     const loaded = await store.load('m0')
-    expect(loaded?.scene).toMatchObject({ id: 'm0', formatVersion: 2, generatorVersion: 2, size: 128 })
+    expect(loaded?.scene).toMatchObject({ id: 'm0', formatVersion: 3, generatorVersion: 3, size: 128 })
     expect(same(loaded!.layers.heights.data, createFlatLayers(128).heights.data)).toBe(true)
   })
 

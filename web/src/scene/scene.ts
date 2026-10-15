@@ -1,18 +1,20 @@
+import { emptyFeatures, type Features } from '../features/features'
+
 export type SceneSize = 64 | 128 | 256
 
 export const SCENE_SIZES: readonly SceneSize[] = [64, 128, 256]
 
-export const SCENE_FORMAT_VERSION = 2
+export const SCENE_FORMAT_VERSION = 3
 
 /** Recorded per scene so a generator update can't silently change old scenes. */
-export const GENERATOR_VERSION = 2
+export const GENERATOR_VERSION = 3
 
 export const DEFAULT_SCENE_NAME = 'Untitled scene'
 export const MAX_SCENE_NAME_LENGTH = 80
 
 /** A scene as saved locally and in project files. Units are metres; timestamps are ISO 8601. */
 export interface Scene {
-  formatVersion: 2
+  formatVersion: 3
   generatorVersion: number
   id: string
   name: string
@@ -20,6 +22,8 @@ export interface Scene {
   seed: number
   createdAt: string
   updatedAt: string
+  /** Paths, rivers and ponds: inputs that the ground is generated from. */
+  features: Features
 }
 
 export function normalizeSceneName(name: string): string {
@@ -42,6 +46,7 @@ export function createScene(opts: { name?: string; size: SceneSize; now?: Date; 
     seed: opts.seed ?? randomSeed(),
     createdAt: timestamp,
     updatedAt: timestamp,
+    features: emptyFeatures(),
   }
 }
 

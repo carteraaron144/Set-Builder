@@ -70,7 +70,7 @@ export function parseRules(data: unknown): ScatterRules {
   return result.data as ScatterRules
 }
 
-const BY_GENERATOR: Record<number, unknown> = { 2: rulesV2 }
+const BY_GENERATOR: Record<number, unknown> = { 2: rulesV2, 3: rulesV2 }
 
 /** The rules a generator version was made with, so rule changes never silently alter saved scenes. */
 export function rulesFor(generatorVersion: number): ScatterRules {

@@ -2,7 +2,7 @@ import { strToU8, zipSync } from 'fflate'
 import { describe, expect, it } from 'vitest'
 import { paint, sculpt } from '../terrain/brush'
 import { createFlatLayers, type TerrainLayers } from '../terrain/layers'
-import { createScene } from './scene'
+import { createScene, type Scene } from './scene'
 import {
   layersFromBuffers,
   parseScene,
@@ -65,18 +65,49 @@ describe('scene file', () => {
   it('opens a v1 file as flat meadow', () => {
     const { generatorVersion: _g, ...v1 } = { ...scene, formatVersion: 1 }
     const read = readSceneFile(zipWith({ 'scene.json': JSON.stringify(v1) }))
-    expect(read.scene).toEqual({ ...scene, formatVersion: 2, generatorVersion: 2 })
+    expect(read.scene).toEqual({ ...scene, formatVersion: 3, generatorVersion: 3 })
     expect(same(read.layers.heights.data, createFlatLayers(64).heights.data)).toBe(true)
     expect(same(read.layers.biomes.data, createFlatLayers(64).biomes.data)).toBe(true)
   })
 
-  it('opens a generator-1 scene as generator 2', () => {
-    const read = readSceneFile(v2Zip({ 'scene.json': JSON.stringify({ ...scene, generatorVersion: 1 }) }))
-    expect(read.scene.generatorVersion).toBe(2)
+  it('opens a v2 scene as v3 with no features', () => {
+    const { features: _f, ...rest } = scene
+    for (const generatorVersion of [1, 2]) {
+      const read = readSceneFile(v2Zip({ 'scene.json': JSON.stringify({ ...rest, formatVersion: 2, generatorVersion }) }))
+      expect(read.scene).toEqual({ ...scene, formatVersion: 3, generatorVersion: 3, features: { splines: [], ponds: [] } })
+    }
+  })
+
+  it('round-trips features', () => {
+    const withFeatures: Scene = {
+      ...scene,
+      features: {
+        splines: [
+          { id: 's1', kind: 'path', style: 'cobble', width: 3, points: [{ x: -5, z: 0 }, { x: 0, z: 4 }, { x: 6, z: 2 }] },
+          { id: 's2', kind: 'river', style: 'dirt', width: 4, points: [{ x: -30, z: -30 }, { x: 30, z: 30 }] },
+        ],
+        ponds: [{ id: 'w1', seed: { x: 3, z: -3 }, level: 1.25 }],
+      },
+    }
+    expect(readSceneFile(writeSceneFile(withFeatures, shapedLayers())).scene).toEqual(withFeatures)
+  })
+
+  it('clamps feature widths on load', () => {
+    const wide = { ...scene, features: { splines: [{ id: 's', kind: 'path', style: 'dirt', width: 20, points: [{ x: 0, z: 0 }, { x: 1, z: 1 }] }], ponds: [] } }
+    expect(parseScene(wide).features.splines[0].width).toBe(8)
+  })
+
+  it.each([
+    ['a point outside the scene', { splines: [{ id: 's', kind: 'path', style: 'dirt', width: 2, points: [{ x: 33, z: 0 }, { x: 0, z: 0 }] }], ponds: [] }],
+    ['a 1-point spline', { splines: [{ id: 's', kind: 'path', style: 'dirt', width: 2, points: [{ x: 0, z: 0 }] }], ponds: [] }],
+    ['201 splines', { splines: Array.from({ length: 201 }, (_, i) => ({ id: `s${i}`, kind: 'path', style: 'dirt', width: 2, points: [{ x: 0, z: 0 }, { x: 1, z: 0 }] })), ponds: [] }],
+    ['missing features', undefined],
+  ])('rejects a v3 scene with %s', (_label, features) => {
+    expect(reasonOf(() => parseScene({ ...scene, features }))).toBe('invalid-scene')
   })
 
   it('reports a scene made by a newer generator instead of opening it', () => {
-    expect(reasonOf(() => readSceneFile(v2Zip({ 'scene.json': JSON.stringify({ ...scene, generatorVersion: 3 }) })))).toBe('newer-version')
+    expect(reasonOf(() => readSceneFile(v2Zip({ 'scene.json': JSON.stringify({ ...scene, generatorVersion: 4 }) })))).toBe('newer-version')
   })
 
   it('rejects bytes that are not a zip', () => {
@@ -102,8 +133,8 @@ describe('scene file', () => {
   })
 
   it('reports a newer format version before checking the shape', () => {
-    expect(reasonOf(() => parseScene({ formatVersion: 3 }))).toBe('newer-version')
-    expect(reasonOf(() => readSceneFile(v2Zip({ 'scene.json': JSON.stringify({ ...scene, formatVersion: 3 }) })))).toBe(
+    expect(reasonOf(() => parseScene({ formatVersion: 4 }))).toBe('newer-version')
+    expect(reasonOf(() => readSceneFile(v2Zip({ 'scene.json': JSON.stringify({ ...scene, formatVersion: 4 }) })))).toBe(
       'newer-version',
     )
   })

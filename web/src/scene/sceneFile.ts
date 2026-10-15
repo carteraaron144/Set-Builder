@@ -7,6 +7,7 @@ import {
   quantizeWeights,
   type TerrainLayers,
 } from '../terrain/layers'
+import { emptyFeatures, featuresSchema } from '../features/features'
 import { GENERATOR_VERSION, SCENE_FORMAT_VERSION, SCENE_SIZES, type Scene, type SceneSize } from './scene'
 
 /** A project file is a zip of scene.json plus the layer blobs. */
@@ -46,11 +47,20 @@ const sceneFields = {
 }
 
 const v1Schema = z.object({ formatVersion: z.literal(1), ...sceneFields })
-const v2Schema = z.object({
+const v2Schema = z.object({ formatVersion: z.literal(2), generatorVersion: z.number().int().min(1), ...sceneFields })
+const v3Schema = z.object({
   formatVersion: z.literal(SCENE_FORMAT_VERSION),
   generatorVersion: z.number().int().min(1),
   ...sceneFields,
+  features: z.unknown(),
 })
+
+function checkGenerator(generatorVersion: number): void {
+  // A newer generator would build this scene differently from what this version can (and has no rules for it).
+  if (generatorVersion > GENERATOR_VERSION) {
+    throw new SceneFileError('newer-version', `Generator ${generatorVersion} is newer than ${GENERATOR_VERSION}`)
+  }
+}
 
 function formatVersionOf(data: unknown): unknown {
   return typeof data === 'object' && data !== null && 'formatVersion' in data
@@ -67,16 +77,21 @@ export function parseScene(data: unknown): Scene {
   if (version === 1) {
     const v1 = v1Schema.safeParse(data)
     if (!v1.success) throw new SceneFileError('invalid-scene', v1.error.message)
-    return { ...v1.data, formatVersion: SCENE_FORMAT_VERSION, generatorVersion: GENERATOR_VERSION } as Scene
+    return { ...v1.data, formatVersion: SCENE_FORMAT_VERSION, generatorVersion: GENERATOR_VERSION, features: emptyFeatures() }
   }
-  const result = v2Schema.safeParse(data)
+  if (version === 2) {
+    const v2 = v2Schema.safeParse(data)
+    if (!v2.success) throw new SceneFileError('invalid-scene', v2.error.message)
+    checkGenerator(v2.data.generatorVersion)
+    // Generators 2 and 3 differ only in features, which v2 scenes don't have, so they upgrade in place.
+    return { ...v2.data, formatVersion: SCENE_FORMAT_VERSION, generatorVersion: GENERATOR_VERSION, features: emptyFeatures() }
+  }
+  const result = v3Schema.safeParse(data)
   if (!result.success) throw new SceneFileError('invalid-scene', result.error.message)
-  // A newer generator would build this scene differently from what this version can (and has no rules for it).
-  if (result.data.generatorVersion > GENERATOR_VERSION) {
-    throw new SceneFileError('newer-version', `Generator ${result.data.generatorVersion} is newer than ${GENERATOR_VERSION}`)
-  }
-  // Generator 1 made terrain only; generator 2 adds slope bands and scatter, so older scenes upgrade in place.
-  return { ...result.data, generatorVersion: Math.max(result.data.generatorVersion, 2) } as Scene
+  checkGenerator(result.data.generatorVersion)
+  const features = featuresSchema(result.data.size).safeParse(result.data.features)
+  if (!features.success) throw new SceneFileError('invalid-scene', features.error.message)
+  return { ...result.data, features: features.data } as Scene
 }
 
 /**

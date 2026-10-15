@@ -1,0 +1,36 @@
+{
+  "path": {
+    "styles": {
+      "dirt": { "color": "#8a6a45", "width": 2 },
+      "cobble": { "color": "#8d8a84", "width": 3 }
+    },
+    "minWidth": 1,
+    "maxWidth": 8,
+    "verge": { "color": "#6f7d3c", "width": 0.75 },
+    "shoulder": 2,
+    "gradeWindow": 8,
+    "clearMargin": 1
+  },
+  "river": {
+    "width": 3,
+    "minWidth": 1,
+    "maxWidth": 12,
+    "depthRatio": 0.4,
+    "minDepth": 0.5,
+    "maxDepth": 2,
+    "shoulder": 2,
+    "freeboard": 0.2,
+    "bedColor": "#5b4d3a",
+    "clearMargin": 1.5
+  },
+  "pond": {
+    "clearMargin": 1,
+    "defaultRise": 1,
+    "spillGap": 0.05
+  },
+  "water": {
+    "color": "#3f7f9a",
+    "opacity": 0.75
+  },
+  "snapDistance": 2
+}

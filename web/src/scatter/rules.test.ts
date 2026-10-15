@@ -31,6 +31,10 @@ describe('scatter rules', () => {
     expect(rules.rules.slice(firstGround).every((r) => r.placement === 'ground')).toBe(true)
   })
 
+  it('uses the generator 2 rules for generator 3', () => {
+    expect(rulesFor(3)).toEqual(rulesFor(2))
+  })
+
   it('throws for an unknown generator version', () => {
     expect(() => rulesFor(99)).toThrow()
   })
