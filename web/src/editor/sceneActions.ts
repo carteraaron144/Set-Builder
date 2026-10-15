@@ -39,7 +39,7 @@ export async function saveCurrent(deps: ActionDeps): Promise<void> {
   const scene = deps.store.getState().scene
   try {
     const sceneStore = await deps.sceneStore()
-    await sceneStore.save(scene)
+    await sceneStore.save(scene, createFlatLayers(scene.size))
   } catch {
     deps.store.getState().setMessage({ kind: 'error', text: MESSAGES.storageFailed })
     return
@@ -53,7 +53,7 @@ export async function saveCurrent(deps: ActionDeps): Promise<void> {
 export async function openScene(deps: ActionDeps, id: string): Promise<void> {
   let scene
   try {
-    scene = await (await deps.sceneStore()).load(id)
+    scene = (await (await deps.sceneStore()).load(id))?.scene
   } catch {
     deps.store.getState().setMessage({ kind: 'error', text: MESSAGES.openFailed })
     return
@@ -109,7 +109,7 @@ export async function loadInitialScene(deps: ActionDeps): Promise<void> {
     const sceneStore = await deps.sceneStore()
     const [newest] = await sceneStore.list()
     if (!newest) return
-    const scene = await sceneStore.load(newest.id)
+    const scene = (await sceneStore.load(newest.id))?.scene
     // Don't replace a scene the user has already started editing.
     if (scene && !deps.store.getState().dirty) deps.store.getState().replaceScene(scene)
   } catch {
