@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Painted biomes fill with trees, rocks, bushes and grass from a first asset pack. They are rendered with GPU instancing and regenerate live under the brush, and the whole generated scene can be downloaded as a `.glb` that opens cleanly in Blender and game engines.
+**Goal:** Painted biomes fill with trees, rocks, bushes and grass from a first asset pack, and steep cliffs fill with clusters of faceted rock pillars. Everything is rendered with GPU instancing and regenerates live under the brush. A terrace brush cuts stepped earthen mounds, and the terrain shades grass → earth → rock by slope. The whole generated scene can be downloaded as a `.glb` that opens cleanly in Blender and game engines. The heightmap stays the only terrain representation; volumetric terrain waits for the cave milestone.
 
 **Architecture:** Scatter is a pure, deterministic function of (layers, scene seed, rules, exclusion mask, chunk). Each chunk's candidates come from hashed per-cell darts with priority-based rejection. A candidate's fate depends only on hashes and layer values near it, so chunks generate independently with no seams or duplicates. A Web Worker runs the scatter for dirty chunks, using M1's dirty-chunk machinery through a second consumer channel. The main thread keeps one `InstancedMesh` per asset primitive and rewrites its instance buffer when results arrive. Assets come from asset packs served by the existing `/api/asset-packs` and `/packs/**`; materials are replaced with shared palette-slot materials so packs sit together. Export builds a separate three scene from the same data and writes it with three's `GLTFExporter` in the browser. Nothing generated is ever saved.
 
@@ -68,20 +68,38 @@
   | Rocky | rock 0.02 (s 3 m), small rock 0.05 (s 1.5 m), grass 0.03 (s 2 m) |
   | Swamp | reeds 0.10 (s 1.2 m), bush 0.005 (s 4 m), dead-ish broadleaf 0.001 (s 10 m) |
 
-  - **Slope limits:** trees and bushes ≤ 30°, grass and reeds ≤ 40°, rocks ≤ 60°. The rule `maxSlopeDeg` is shared with M1's 35° rock-colour start, so trees stop where the ground turns to rock.
+  - **Slope limits:** trees and bushes ≤ 30°, grass and reeds ≤ 40°, rocks ≤ 60°, so trees stop where the earth band begins (see slope colour bands).
+  - **Cliffs (every biome):** a face-mode rule places rock pillars (`pillar-*` assets) on steep faces, whatever the biome (cliffs aren't a biome). It uses `minSlopeDeg` 60°, `minWallHeight` 3 m, density 0.6/m², s 0.8 m, sink 0.3 m.
   - **Height limits:** reeds only below +2 m.
   - **Jitter:** scale 0.8–1.25×; yaw uniform. Rocks and grass get up to 10° random tilt; trees stay upright.
   - **Shadows:** grass and reeds don't cast shadows.
+- **Face-mode scatter:**
+  - **Placement:** every rule has `placement: "ground"` (upright, slope ≤ `maxSlopeDeg`, as above) or `"face"`. A face rule places only where the slope is ≥ `minSlopeDeg` and the local wall is at least `minWallHeight` tall.
+  - **Measuring the wall:** from the candidate point, march down and up the fall line in 0.5 m steps, up to 16 m each way, while the slope stays ≥ `minSlopeDeg`. That gives the wall foot and top.
+  - **Orientation and length:** the piece's up axis is the uphill fall-line tangent at the candidate, so pillars lie along the face (near-vertical walls give near-upright pillars), with ±8° yaw and pitch jitter. Its length is (wall height + `sinkDepth`) × a hash in [0.7, 1.0], clamped to the asset's length range. Its base sits `sinkDepth` below the wall foot along the axis.
+  - **No gaps:** the piece is pushed `sinkDepth` into the face along −normal, so its back is embedded. `minSpacing` is set below the pillars' widths, so neighbours overlap.
+  - **Same algorithm:** face rules use the same hashed cells, priorities, chunk ownership and caps. Wall marching reads layers outside the chunk but doesn't affect acceptance, so it adds no margin. It does extend which chunks a stroke can affect (see the worker protocol).
+  - **Ground stays off faces:** `parseRules` rejects any ground rule whose `maxSlopeDeg` exceeds the smallest face-rule `minSlopeDeg`, so ground rules never place on faces that face rules can cover. Face rules come first in rule order and are `blocking`, so ground pieces keep clear of pillar footprints.
+- **Rock pillars in the placeholder pack:** `pillar-single`, `pillar-pair`, `pillar-cluster-3` and `pillar-cluster-5`. They are elongated, tapered, faceted 5–7-sided prisms with bevelled ends, some clustered at varied heights, 40–200 triangles each, palette slot `stone`, kind `cliff`. Each is modelled along +Y with base at y = 0 and a nominal length of 1 m (scaled per instance), with box collision.
+- **Terrace brush (new M1-style terrain mode `terrace`):**
+  - **What it does:** blends heights under the brush toward the nearest multiple of the step height, `h += (round(h / step) · step − h) · k`, with flatten's k = min(1, 4·strength·w·dt). Steps are absolute multiples of the step from y = 0, so neighbouring strokes line up.
+  - **Step height:** a panel slider from 0.5 to 5 m, default 1.5 m, stored in the editor store.
+  - **Invert:** does nothing (as with smooth and flatten).
+  - **Everything else is shared:** undo, chunk rebuilds, saves and scatter regeneration work like the other modes. Terrace joins the Terrain tool's mode list.
+  - **Riser sharpness:** a riser falls within one 0.5 m sample interval, as sharp as the grid allows.
+- **Slope colour bands** (replacing M1's single rock blend):
+  - **Bands:** biome colour on flat ground, then an earth band, then rock on the steepest faces. `biomes.json` gets `"slopeBands": { "earth": { "color": "#8a6a48", "startDeg": 30, "fullDeg": 35 }, "rock": { "color": "#8a8178", "startDeg": 60, "fullDeg": 65 } }`.
+  - **Why these thresholds:** slope is measured by central differences over 1 m, so a 1.5 m terrace riser reads ≈56°, which is earth. That gives the earthen walls the mounds should have. Taller cliffs read 70°+ and come out rock, matching where pillars go. Terrace steps above about 1.7 m start turning rocky.
 - **Budget overflow:** a chunk over its cap keeps its instances in rule order (trees first) and, within a rule, highest priority first. It never drops terrain. When any chunk is capped, the editor shows the info message "Scatter is at its density limit in some areas."
 - **Generator versioning:**
-  - **The bump:** `GENERATOR_VERSION` becomes 2 (generator 2 = M1 terrain + M2 scatter).
-  - **Old scenes:** generatorVersion-1 scenes, which had terrain only and no scatter, open as generatorVersion 2 and gain scatter. They are not marked dirty, since the terrain is unchanged.
+  - **The bump:** `GENERATOR_VERSION` becomes 2 (generator 2 = M1 terrain with slope colour bands + M2 scatter, including cliffs). The terrace brush changes no generation, only the inputs.
+  - **Old scenes:** generatorVersion-1 scenes, which had terrain only and no scatter, open as generatorVersion 2. They gain scatter, and their steep faces recolour from the single rock blend to the earth and rock bands. They are not marked dirty, since the inputs are unchanged.
   - **Rule lookup:** `scatter/rules.ts` maps each generator version to its rules file, so later rule changes bump the version instead of silently changing saved scenes.
 - **Rendering:**
   - **Meshes:** one `InstancedMesh` per (asset, primitive), scene-wide, sized to the instances it holds. Its matrix buffer is rewritten (all chunks concatenated) when any chunk's results for that asset change. That's at most about 1.6 M floats, a few ms, and only when results arrive.
   - **Culling:** frustum culling is per mesh with a recomputed bounding sphere.
   - **Toggle:** a "Scatter" toggle in the bottom toolbar (on by default) hides or shows all instances.
-- **Worker protocol:** at most one request is in flight. It carries the dirty chunk ids plus a copy of the heights, biomes and exclusion mask (transferred). While a request runs, newly dirty chunks accumulate, and the next request goes when the current one returns. Results for a chunk are dropped if that chunk was dirtied again after the request was sent. Then it's re-requested.
+- **Worker protocol:** a stroke's dirty chunks are first expanded by one ring of neighbours. Acceptance near a border depends on candidates within the margin, and face pieces measure walls up to 16 m away, both under 32 m. Then at most one request is in flight. It carries the dirty chunk ids plus a copy of the heights, biomes and exclusion mask (transferred). While a request runs, newly dirty chunks accumulate, and the next request goes when the current one returns. Results for a chunk are dropped if that chunk was dirtied again after the request was sent. Then it's re-requested.
 - **Export:**
   - **What's exported:** a separate export scene built from data, not the render scene. It has a root node named after the scene, with `terrain` and `scatter` groups.
   - **Grouping options:**
@@ -126,6 +144,10 @@
    - **Blender:** it imports headless into the installed Blender with the right scale, names and `-col` objects.
 
    Tests in Tasks 8 and 9.
+6. **Face scatter at chunk borders:** a cliff that crosses a chunk border gets the same pillars whether generated chunk by chunk or in one pass, with no doubled or missing pillars at the border. A stroke that changes a wall top in one chunk updates pillars in the neighbouring chunk. Tests in Tasks 4 and 5.
+7. **Pillars floating off a wall or showing gaps:** on a vertical wall, a 70° wall and a curved cliff, every pillar's back line stays at or below the terrain surface and its front line above it, with its base below the wall foot. Neighbouring pillars overlap. There are no pillars on 1.5 m terrace risers or on walls under 3 m. Tests in Task 4; browser check in Task 7.
+8. **Terrace steps at the scene edge:** a terrace dab overlapping the scene edge or corner snaps only in-bounds samples. Undo restores them exactly, and the edge chunks rebuild with risers at most one sample wide. Tests in Task 10.
+9. **Rebuild cost when a stroke changes many steep faces:** a 50 m raise stroke across a 256 m scene full of cliffs keeps 60 fps. The Worker request (one ring of extra chunks, wall marching) finishes in under 0.5 s, and the main thread's per-frame cost stays as in M1. Measured in Task 7.
 
 ---
 
@@ -149,6 +171,7 @@ web/src/export/exportGlb.ts       # GLTFExporter -> Uint8Array, plus a small GLB
 web/src/editor/ExportDialog.tsx
 scripts/blender-check.py          # headless Blender import check (Task 9)
 (modified) server packs/*.kt + tests, web/src/scene/scene.ts, web/src/terrain/terrainEditor.ts,
+           web/src/terrain/brush.ts (terrace), chunks.ts + palette.ts + biomes.json (slope bands), BrushPanel.tsx,
            web/src/editor/editorStore.ts, ToolBar.tsx, TopBar.tsx, App.tsx, viewport/Viewport.tsx, README.md
 ```
 
@@ -182,24 +205,26 @@ scripts/blender-check.py          # headless Blender import check (Task 9)
 - Produces:
   ```ts
   export type PaletteSlot = 'bark' | 'leaf' | 'pine' | 'stone' | 'grass' | 'reed';
-  export type AssetKind = 'tree' | 'rock' | 'bush' | 'grass' | 'plant';
+  export type AssetKind = 'tree' | 'rock' | 'bush' | 'grass' | 'plant' | 'cliff';
   export type Collision = 'none' | { box: [number, number, number] } | { cylinder: [number, number] };
-  export interface PackAsset { id: string; file: string; kind: AssetKind; footprint: number; collision: Collision }
+  export interface PackAsset { id: string; file: string; kind: AssetKind; footprint: number; collision: Collision;
+                               lengthRange?: [number, number] }   // cliff pieces: allowed scaled length in metres
   export interface PackManifest { name: string; version: string; source: string; licence: string; assets: PackAsset[] }
   export function parsePackManifest(data: unknown): PackManifest;   // zod; throws Error naming the problem
   export interface BasicsModel { asset: PackAsset; object: THREE.Group }  // meshes named by part, materials named by PaletteSlot
   export function basicsModels(): BasicsModel[];   // deterministic (fixed internal seed)
   ```
-  The asset ids are `pine`, `broadleaf`, `rock-large`, `rock-small`, `bush`, `grass-tuft` and `reeds`.
+  The asset ids are `pine`, `broadleaf`, `rock-large`, `rock-small`, `bush`, `grass-tuft`, `reeds`, `pillar-single`, `pillar-pair`, `pillar-cluster-3` and `pillar-cluster-5`.
 
 - [ ] **Step 1: Write failing tests:**
-  - `basicsModels()` returns the 7 ids. Every mesh's material name is a `PaletteSlot`, and every model is 20–400 triangles.
+  - `basicsModels()` returns the 11 ids. Every mesh's material name is a `PaletteSlot`, and every model is 20–400 triangles.
+  - The pillar pieces are 40–200 triangles each, slot `stone`, kind `cliff`, box collision. Each is 1 m ± 0.05 tall along +Y from y = 0, with every face planar (faceted) and the top narrower than the base. The cluster pieces have at least 3 separate prisms of different heights.
   - Each model's bounding box sits on y = 0. The pine is 6–9 m tall, the broadleaf 5–8 m, and the grass tuft ≤ 0.6 m.
   - Two calls give identical vertex arrays.
   - `parsePackManifest` accepts the committed `packs/setbuilder-basics/pack.json` (read with `fs`) and rejects: a missing licence, an unknown `kind`, a negative footprint, and a `file` containing `..`.
 - [ ] **Step 2: Run** `cd web && npm test -- assets`. Expected: FAIL.
 - [ ] **Step 3: Implement** `basicsModels` (simple primitives: cones, cylinders, icosahedra with deterministic vertex jitter, crossed quads) and `parsePackManifest`.
-- [ ] **Step 4: Write `makeBasicsPack.ts`.** It writes `pack.json` (name "Set Builder Basics", version "1.0.0", source "Generated by Set Builder (web/scripts/makeBasicsPack.ts)", licence "CC0-1.0"), `LICENSE.txt` (CC0 text pointer) and `models/<id>.glb`, using `GLTFExporter.parseAsync(object, { binary: true })`. Node has no `FileReader`, so the script installs a minimal shim (`readAsArrayBuffer` via `blob.arrayBuffer()`, firing `onloadend`) before importing the exporter. Run `npm run make-pack`; expect 7 `.glb` files of a few KB each. Commit them.
+- [ ] **Step 4: Write `makeBasicsPack.ts`.** It writes `pack.json` (name "Set Builder Basics", version "1.0.0", source "Generated by Set Builder (web/scripts/makeBasicsPack.ts)", licence "CC0-1.0"), `LICENSE.txt` (CC0 text pointer) and `models/<id>.glb`, using `GLTFExporter.parseAsync(object, { binary: true })`. Node has no `FileReader`, so the script installs a minimal shim (`readAsArrayBuffer` via `blob.arrayBuffer()`, firing `onloadend`) before importing the exporter. Run `npm run make-pack`; expect 11 `.glb` files of a few KB each. Commit them.
 - [ ] **Step 5: Run** `npm test -- assets`. Expected: PASS, including the manifest test against the committed file.
 - [ ] **Step 6: Commit**: `"Add the generated setbuilder-basics asset pack"`
 
@@ -216,8 +241,11 @@ scripts/blender-check.py          # headless Blender import check (Task 9)
   ```ts
   export interface ScatterRule {
     asset: string;            // "<packId>/<assetId>"
-    biome: BiomeId; density: number; minSpacing: number;
+    density: number; minSpacing: number;
     scale: [number, number]; maxTiltDeg: number; maxSlopeDeg: number; minHeight: number; maxHeight: number;
+    placement: 'ground' | 'face';
+    biome: BiomeId | 'any';   // face rules use 'any'
+    minSlopeDeg?: number; minWallHeight?: number; sinkDepth?: number;   // required when placement is 'face'
     blocking: boolean;        // later rules keep clear of this rule's footprints
     castShadow: boolean;
   }
@@ -233,6 +261,8 @@ scripts/blender-check.py          # headless Blender import check (Task 9)
   - Every rule's asset exists in the basics manifest.
   - `rulesFor(99)` throws.
   - `parseRules` rejects a negative density and `scale` min > max.
+  - `parseRules` rejects a face rule missing `minSlopeDeg`, `minWallHeight` or `sinkDepth`, and a ground rule whose `maxSlopeDeg` exceeds the smallest face `minSlopeDeg`.
+  - `rulesFor(2)` contains the cliff rule (placement face, biome any), ordered before every ground rule.
   - `MATERIAL_PALETTE` has all 6 slots.
   - The updated scene tests: `createScene` gives `generatorVersion: 2`, and a file with `generatorVersion: 1` opens as 2.
 - [ ] **Step 2: Run** `npm test -- rules scene`. Expected: FAIL.
@@ -247,13 +277,17 @@ scripts/blender-check.py          # headless Blender import check (Task 9)
 - Test: `web/src/scatter/hash.test.ts`, `web/src/scatter/scatter.test.ts`
 
 **Interfaces:**
-- Consumes: Tasks 2–3, M1 `TerrainLayers`, `heightAt`, `biomeWeightsAt`, `chunkCount`, `CHUNK_SIZE`.
+- Consumes: Tasks 2–3, M1 `TerrainLayers`, `Heightmap`, `heightAt`, `biomeWeightsAt`, `chunkCount`, `CHUNK_SIZE`, `Vec3` (`terrain/pick.ts`).
 - Produces:
   ```ts
   export function hash4(seed: number, a: number, b: number, c: number, salt: number): number;  // uint32
   export const unit = (h: number) => h / 4294967296;                                            // [0, 1)
   export interface ScatterInputs { layers: TerrainLayers; seed: number; rules: ScatterRules; exclusion: Uint8Array | null }
-  export interface Instance { rule: number; x: number; y: number; z: number; yaw: number; tiltX: number; tiltZ: number; scale: number; priority: number }
+  export interface Instance { rule: number; x: number; y: number; z: number;
+                              quat: [number, number, number, number];   // rotation (ground: yaw then tilt; face: fall-line frame + jitter)
+                              scale: [number, number, number];          // ground: uniform; face: [w, length, w]
+                              priority: number }
+  export function measureWall(h: Heightmap, x: number, z: number, minSlopeDeg: number): { foot: Vec3; top: Vec3; height: number; normal: Vec3; up: Vec3 } | null;
   export interface ChunkScatter { chunk: number; instances: Instance[]; capped: boolean }   // sorted by (rule, priority desc)
   export function scatterMargin(rules: ScatterRules): number;  // max(minSpacing) + 2·max(footprint)
   export function scatterRect(inputs: ScatterInputs, x0: number, z0: number, x1: number, z1: number,
@@ -267,11 +301,21 @@ scripts/blender-check.py          # headless Blender import check (Task 9)
   - **Hash:** `hash4` is deterministic, and changing any one argument changes the output (10 000 samples, no collisions on a 100 × 100 grid).
   - **Determinism (Review Focus 1):** `scatterChunk` twice gives deep-equal results. A different seed gives a different set.
   - **Seams (Review Focus 1):** with test rules that never hit the cap, the union of `scatterChunk` over all chunks equals `scatterRect` over the whole scene square. There are no two instances of one rule closer than its `minSpacing`, and every instance lies in exactly one chunk.
-  - **Locality:** after painting forest in chunk 0 of a 128 m scene, only chunks within `scatterMargin` of the painted rect change.
+  - **Locality:** after painting forest in chunk 0 of a 128 m scene, only chunks within `scatterMargin` of the painted rect change, and always within one ring of the dirty chunks.
   - **Biome weight:** an all-meadow scene has no pine; painting forest adds pines only where the forest weight is above 0. Expected count for a rule on uniform ground is within ±15% of `density · area` (accounting for rejection); write the observed rate into the test as a regression value.
   - **Limits:** on a 45° ramp there are no trees but rocks remain. Reeds appear only below +2 m. An exclusion mask over the left half leaves no instances there.
   - **Budget (Review Focus 2):** an all-forest 256 m scene with densities ×20 (test-only rules) gives every chunk ≤ `chunkCap`, `capped: true`, and a total ≤ 100 000. The capped result is deterministic and keeps trees before grass.
-  - Every instance's y equals `heightAt(x, z)`; yaw is in [0, 2π), scale within the rule's range, and tilt ≤ `maxTiltDeg`.
+  - Every ground instance's y equals `heightAt(x, z)`. Its yaw is in [0, 2π), its scale is within the rule's range, and its tilt is ≤ `maxTiltDeg`.
+  - **Face placement (Review Focus 7):** test three walls: a 10 m vertical wall, a 70° wall, and a curved cliff (a raised disc).
+    - Pillars appear only on them, and none on flat ground or slopes under 60°.
+    - Each pillar's up axis is within 9° of the uphill fall line.
+    - Its length is within [0.7, 1.0] × (wall height + 0.3 m), clamped.
+    - Its back line (axis offset by half its depth toward the wall) is at or below `heightAt` + 0.05 everywhere. Its front line is above the surface, and its base is below the wall foot.
+    - Neighbouring pillars are closer than their widths.
+    - A terraced mound with 1.5 m risers and a 2.5 m wall get no pillars (`minWallHeight` 3 m).
+    - Ground rules place nothing where the slope is ≥ 60°.
+  - **Face seams (Review Focus 6):** a 20 m cliff crossing a chunk border gives the same pillars chunk by chunk as in one `scatterRect` pass.
+  - `measureWall` on a 10 m vertical step reports a height of 10 ± 0.5 m, an up axis within 5° of +Y, and `null` on flat ground.
 - [ ] **Step 2: Run** `npm test -- hash scatter`. Expected: FAIL.
 - [ ] **Step 3: Implement** the algorithm in **Decisions**. Candidates come from cells overlapping the chunk square plus the margin; acceptance checks the neighbour cells within `minSpacing` and within the blocking footprints; finally keep the points in the half-open chunk square and apply the cap.
 - [ ] **Step 4: Run.** Expected: PASS. Note the time for one 256 m all-forest chunk in the test output (budget: ≤ 15 ms in Node, so a 25-chunk stroke regenerates in well under 0.5 s in the Worker).
@@ -311,6 +355,7 @@ scripts/blender-check.py          # headless Blender import check (Task 9)
   - **Determinism (Review Focus 1):** two managers on the same scene and layers end with deep-equal `instancesByRule()`, and so does a manager on the layers read back from `writeSceneFile` / `readSceneFile`.
   - **Budget flag (Review Focus 2):** `capped` turns true with the ×20 rules and the store's message shows the density text.
   - **Copies:** requests carry copies, so mutating the layers after `pump()` doesn't change what the runner saw.
+  - **Neighbour ring (Review Focus 6):** a stroke dirtying chunk 9 of a 256 m scene requests chunks 0–2, 8–10 and 16–18. After raising a wall top that sits in one chunk, the pillars in the neighbouring chunk match a fresh full run.
 - [ ] **Step 2: Run** `npm test -- terrainEditor scatterManager`. Expected: FAIL.
 - [ ] **Step 3: Implement.**
   - **`scatterWorker.ts`:** `self.onmessage` runs `scatterChunk` for each requested chunk with `rulesFor(generatorVersion)`, and posts the results back.
@@ -359,10 +404,10 @@ scripts/blender-check.py          # headless Blender import check (Task 9)
 
 **Interfaces:**
 - Consumes: Tasks 5–6.
-- Produces: `export function writeInstanceMatrices(instances: Instance[], out: Float32Array): void` (in `scatter/instanceMatrices.ts`: translate × yaw × tilt × uniform scale, column-major like three's `Matrix4.elements`); `ScatterMesh({ manager, library })`.
+- Produces: `export function writeInstanceMatrices(instances: Instance[], out: Float32Array): void` (in `scatter/instanceMatrices.ts`: compose(position, quat, scale), column-major like three's `Matrix4.elements`; non-uniform scale for face pieces); `ScatterMesh({ manager, library })`.
 
 - [ ] **Step 1: Write failing tests.**
-  - `writeInstanceMatrices` matches `new Matrix4().compose(position, quaternion(yaw, tilt), scale)` for 100 random instances (within 1e-6).
+  - `writeInstanceMatrices` matches `new Matrix4().compose(position, quaternion, scale)` for 100 random instances, including non-uniform scale (within 1e-6).
   - ToolBar gains a "Scatter" toggle (`aria-pressed`, default true) that sets `scatterVisible`.
 - [ ] **Step 2: Run** `npm test -- instanceMatrices ToolBar`. Expected: FAIL. **Implement**, then run again. Expected: PASS.
 - [ ] **Step 3: Implement `ScatterMesh`.**
@@ -374,6 +419,8 @@ scripts/blender-check.py          # headless Blender import check (Task 9)
   - **Scatter:** forest, meadow, rocky and swamp each show their assets. Steep rock faces stay bare, reeds stay low, and chunk borders show no seams.
   - **Determinism:** reloading gives the same trees (compare instance hashes from `instancesByRule()`).
   - **Performance (Review Focus 3):** on a 256 m scene painted to hit the 100 000 budget, idle frame time stays at 60 fps. A scripted 50 m raise and paint stroke keeps 60 fps (no frames ≥ 33 ms over 3 s), and scatter catches up within 0.5 s of releasing. Record worker times per request and the CPU per frame on the main thread.
+  - **Cliffs (Review Focus 7):** raise a 15 m wall and terrace a mound. The wall fills with overlapping pillar clusters, embedded in the face, none floating and no gaps visible at grazing angles. The mound's 1.5 m risers stay bare earth.
+  - **Rebuild cost (Review Focus 9):** on a 256 m scene with several cliffs at full budget, a scripted 50 m stroke across them holds 60 fps. Record the Worker time for the ring-expanded requests, which must be under 0.5 s.
   - **Toggle:** the Scatter toggle hides all instances.
   - **WebGL2:** `?renderer=webgl2` renders the instances.
 - [ ] **Step 5: Commit**: `"Render scatter with GPU instancing"`
@@ -451,10 +498,55 @@ scripts/blender-check.py          # headless Blender import check (Task 9)
   - The downloaded `.glb` is captured in-page as in M0/M1 and written to the scratchpad for Blender. This is the app's own output, not an external download.
 - [ ] **Step 5: Commit**: `"Export the generated scene as glTF (.glb)"`
 
+### Task 10: Terrace brush and slope colour bands
+
+**Files:**
+- Modify: `web/src/terrain/brush.ts`, `web/src/terrain/terrainEditor.ts`, `web/src/terrain/biomes.json`, `web/src/terrain/palette.ts`, `web/src/terrain/chunks.ts`, `web/src/editor/editorStore.ts`, `web/src/editor/BrushPanel.tsx`, `web/src/viewport/BrushRig.tsx`, `README.md`, and their tests
+- Test: `web/src/terrain/brush.test.ts`, `web/src/terrain/chunks.test.ts`, `web/src/terrain/terrainEditor.test.ts`, `web/src/editor/BrushPanel.test.tsx`, `web/src/editor/editorStore.test.ts`
+
+This task is independent of Tasks 1–9 and can run first or in parallel. Task 4's tests use it for terraced mounds, so if Task 4 runs first, build the mound in the test by writing heights directly.
+
+**Interfaces:**
+- Consumes: M1 brushes and chunks.
+- Produces:
+  ```ts
+  export type TerrainMode = 'raise' | 'lower' | 'smooth' | 'flatten' | 'noise' | 'terrace';
+  // sculpt ctx gains terraceStep: number (metres)
+  // StrokeTool terrain gains terraceStep?: number; the store gains terraceStep (default 1.5, clamped 0.5..5) + setTerraceStep
+  export interface SlopeBand { color: RGB; start: number; full: number }   // radians
+  export interface TerrainPalette { biomes: [RGB, RGB, RGB, RGB]; earth: SlopeBand; rock: SlopeBand }   // replaces rock/slopeStart/slopeFull
+  ```
+
+- [ ] **Step 1: Write failing tests:**
+  - **Terrace brush:**
+    - Terrace with step 1.5, strength 1, falloff 0, dt 10 on a ramp makes every sample within r a multiple of 1.5 (±1e-5). Where the ramp crosses a multiple, a riser spans one sample interval. Invert gives exactly the same result.
+    - With step 0.5 it snaps to multiples of 0.5. The store clamps the step to 0.5–5.
+  - **Terrace at the edge (Review Focus 8):** a terrace dab at (−32, −32) on a 64 m scene changes only in-bounds samples, and undo through `TerrainEditor` restores them exactly. The dirty chunks include corner chunk 0.
+  - **Panel:** the Terrain radio group lists Raise, Lower, Smooth, Flatten, Noise, Terrace. With Terrace selected, a "Step" slider (0.5–5, "1.5 m") appears and sets `terraceStep`.
+  - **Slope bands:**
+    - On ramps: 20° is the biome colour, 33° a biome/earth blend, 45° earth, 62° an earth/rock blend, and 70° rock.
+    - The vertices at the top and bottom of a 1.5 m terrace riser are earth (central-difference slope ≈56°), and a 10 m vertical wall's face vertices are rock.
+    - Update M1's "rock at 60°" test to 70°.
+  - **Save round trip:** a terraced scene saved and reopened through `writeSceneFile` / `readSceneFile` keeps its heights byte-identical.
+- [ ] **Step 2: Run** `npm test -- brush chunks terrainEditor BrushPanel editorStore`. Expected: FAIL.
+- [ ] **Step 3: Implement.**
+  - **Brush:** `sculpt` gains the `terrace` case.
+  - **Stroke:** `BrushRig` passes the store's `terraceStep` into the stroke.
+  - **Palette:** `paletteFrom` reads `slopeBands`.
+  - **Colour:** `updateChunkGeometry` blends biome → earth by `smoothstep(earth.start, earth.full, slope)`, then → rock by `smoothstep(rock.start, rock.full, slope)`.
+  - **README:** the controls table gains the terrace mode and step.
+- [ ] **Step 4: Run** `npm test`. Expected: PASS. **Verify in a browser:**
+  - Terrace a raised mound: it shows earthen steps with short near-vertical walls.
+  - A tall raised wall shows rock.
+  - Terracing at a scene corner looks right.
+  - Undo restores the terraces.
+  - The M1 performance numbers hold for a 50 m terrace stroke.
+- [ ] **Step 5: Commit**: `"Add the terrace brush and slope colour bands"`
+
 ---
 
 ## Done when
 
 - `cd web && npm test` and `cd server && ./gradlew test` (with `JAVA_HOME=/opt/homebrew/opt/openjdk@21`) pass.
-- From `./gradlew bootRun`, painting biomes on a 256 m scene fills them with trees, rocks, bushes, grass and reeds. Sculpting and painting stay at 60 fps while scatter regenerates, and the same scene always shows the same scatter.
+- From `./gradlew bootRun`, painting biomes on a 256 m scene fills them with trees, rocks, bushes, grass and reeds; raised cliffs fill with rock pillars; the terrace brush cuts earthen steps. Sculpting and painting stay at 60 fps while scatter regenerates, and the same scene always shows the same scatter.
 - Export downloads a `.glb` that the installed Blender imports headless with correct scale, names and `-col` meshes. The README states the sizes and times measured for a 256 m scene.
