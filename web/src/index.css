@@ -1,0 +1,57 @@
+:root {
+  --bg: #1b1d22;
+  --panel: #24272e;
+  --border: #353943;
+  --text: #e4e6eb;
+  --muted: #9aa0ab;
+  --accent: #7fb35a;
+  --error: #ff7b72;
+  font: 14px/1.4 system-ui, 'Segoe UI', Roboto, sans-serif;
+  color: var(--text);
+  background: var(--bg);
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+}
+
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.top-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+  flex: none;
+}
+
+.app-name {
+  font-weight: 600;
+  margin-right: 8px;
+}
+
+.viewport-area {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+}
+
+.viewport {
+  position: absolute;
+  inset: 0;
+}
