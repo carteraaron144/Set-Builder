@@ -1,0 +1,7 @@
+spring:
+  application:
+    name: setbuilder
+
+setbuilder:
+  # Asset packs: <packs-dir>/<id>/pack.json. Relative to the working directory (server/ for bootRun).
+  packs-dir: ../packs
