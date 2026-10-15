@@ -154,3 +154,28 @@ describe('ScatterManager', () => {
     expect(sent[0]).toBe(0)
   })
 })
+
+describe('ScatterManager failures', () => {
+  it('re-requests the chunks of a failed request', async () => {
+    let fail = true
+    const run: ScatterRunner = async (req) => {
+      if (fail) {
+        fail = false
+        throw new Error('worker crashed')
+      }
+      return runRequest(req)
+    }
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const { manager } = setup(64, run)
+    manager.pump()
+    await flush()
+    manager.pump()
+    await flush()
+    const fresh = setup(64)
+    fresh.manager.pump()
+    await flush()
+    expect(manager.instancesByRule()).toEqual(fresh.manager.instancesByRule())
+    expect(manager.instancesByRule().flat().length).toBeGreaterThan(0)
+    warn.mockRestore()
+  })
+})

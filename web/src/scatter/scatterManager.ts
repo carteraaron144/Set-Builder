@@ -117,8 +117,10 @@ export class ScatterManager {
     this.run(req).then(
       (res) => this.apply(flight, res),
       (err: unknown) => {
-        console.warn('Scatter request failed', err)
-        if (this.inFlight === flight) this.inFlight = null
+        console.warn('Scatter request failed; retrying its chunks', err)
+        if (this.inFlight !== flight) return
+        this.inFlight = null
+        for (const c of flight.chunks) this.pending.add(c)
       },
     )
   }
