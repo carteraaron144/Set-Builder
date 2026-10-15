@@ -11,6 +11,7 @@ import {
   saveCurrent,
   uploadSceneFile,
 } from './editor/sceneActions'
+import { installEditorShortcuts } from './editor/shortcuts'
 import { TopBar } from './editor/TopBar'
 import { Viewport } from './viewport/Viewport'
 import { ViewportErrorBoundary } from './viewport/ViewportErrorBoundary'
@@ -28,16 +29,17 @@ export default function App() {
     void loadInitialScene(deps)
   }, [deps])
 
-  useEffect(() => {
-    const onKeyDown = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey && e.key.toLowerCase() === 's') {
-        e.preventDefault()
-        void saveCurrent(deps)
-      }
-    }
-    window.addEventListener('keydown', onKeyDown)
-    return () => window.removeEventListener('keydown', onKeyDown)
-  }, [deps])
+  useEffect(
+    () =>
+      installEditorShortcuts(window, {
+        save: () => void saveCurrent(deps),
+        undo: () => useEditorStore.getState().undo(),
+        redo: () => useEditorStore.getState().redo(),
+        resizeBrush: (f) => useEditorStore.getState().resizeBrush(f),
+        deselectTool: () => useEditorStore.getState().setTool(null),
+      }),
+    [deps],
+  )
 
   useEffect(() => {
     if (!dirty) return

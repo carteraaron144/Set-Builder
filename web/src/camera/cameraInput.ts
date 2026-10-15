@@ -7,6 +7,7 @@ import {
   type CameraState,
   type GroundPoint,
 } from './overheadCamera'
+import { isTextEntry } from '../dom/isTextEntry'
 
 export interface CameraInputOptions {
   /** The canvas. Pointer, wheel and context-menu events are taken from it. */
@@ -37,11 +38,6 @@ const RIGHT = new Set(['KeyD', 'ArrowRight'])
 const HANDLED = new Set([...FORWARD, ...BACK, ...LEFT, ...RIGHT, 'KeyQ', 'KeyE', 'KeyR', 'KeyF', 'PageUp', 'PageDown'])
 
 type DragMode = 'pan' | 'orbit'
-
-function isTextEntry(target: EventTarget | null): boolean {
-  if (!(target instanceof HTMLElement)) return false
-  return target.isContentEditable || target.matches('input, textarea, select, [contenteditable]:not([contenteditable="false"])')
-}
 
 function wheelPixels(e: WheelEvent, element: HTMLElement): number {
   if (e.deltaMode === WheelEvent.DOM_DELTA_LINE) return e.deltaY * 16
