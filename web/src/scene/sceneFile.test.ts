@@ -75,6 +75,10 @@ describe('scene file', () => {
     expect(read.scene.generatorVersion).toBe(2)
   })
 
+  it('reports a scene made by a newer generator instead of opening it', () => {
+    expect(reasonOf(() => readSceneFile(v2Zip({ 'scene.json': JSON.stringify({ ...scene, generatorVersion: 3 }) })))).toBe('newer-version')
+  })
+
   it('rejects bytes that are not a zip', () => {
     const bytes = new Uint8Array(256)
     for (let i = 0; i < bytes.length; i++) bytes[i] = (i * 73 + 11) % 256
