@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   cameraLimits,
+  cameraPoseOverTerrain,
   cameraPosition,
   defaultCameraState,
   orbit,
@@ -110,5 +111,33 @@ describe('cameraPosition', () => {
     expect(p.x).toBeCloseTo(3)
     expect(p.z).toBeCloseTo(-4)
     expect(p.y).toBeCloseTo(50)
+  })
+})
+
+describe('cameraPoseOverTerrain', () => {
+  it('matches cameraPosition over flat ground', () => {
+    const s = state({ target: { x: 4, z: -6 }, yaw: deg(30) })
+    const pose = cameraPoseOverTerrain(s, () => 0)
+    const p = cameraPosition(s)
+    expect(pose.position.x).toBeCloseTo(p.x)
+    expect(pose.position.y).toBeCloseTo(p.y)
+    expect(pose.position.z).toBeCloseTo(p.z)
+    expect(pose.lookAt).toEqual({ x: 4, y: 0, z: -6 })
+  })
+
+  it('lifts camera and target by the ground height under the target', () => {
+    const s = state()
+    const pose = cameraPoseOverTerrain(s, () => 20)
+    expect(pose.position.y).toBeCloseTo(cameraPosition(s).y + 20)
+    expect(pose.lookAt.y).toBe(20)
+  })
+
+  it('keeps the camera at least 2 m above the ground under it', () => {
+    const s = state({ yaw: 0, pitch: deg(15), distance: 20 })
+    const camZ = cameraPosition(s).z
+    const wallUnderCamera = (_x: number, z: number) => (Math.abs(z - camZ) < 1 ? 60 : 0)
+    const pose = cameraPoseOverTerrain(s, wallUnderCamera)
+    expect(pose.position.y).toBeGreaterThanOrEqual(62)
+    expect(pose.lookAt.y).toBe(0)
   })
 })

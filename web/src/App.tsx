@@ -21,6 +21,7 @@ type Dialog = 'new' | 'open' | null
 export default function App() {
   const deps = useMemo(() => browserDeps(useEditorStore), [])
   const scene = useEditorStore((s) => s.scene)
+  const terrain = useEditorStore((s) => s.terrain)
   const dirty = useEditorStore((s) => s.dirty)
   const setRenderBackend = useEditorStore((s) => s.setRenderBackend)
   const [dialog, setDialog] = useState<Dialog>(null)
@@ -62,7 +63,7 @@ export default function App() {
       />
       <main className="viewport-area">
         <ViewportErrorBoundary>
-          <Viewport scene={scene} onBackend={setRenderBackend} />
+          <Viewport scene={scene} terrain={terrain} onBackend={setRenderBackend} />
         </ViewportErrorBoundary>
       </main>
       {dialog === 'new' && (

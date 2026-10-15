@@ -4,17 +4,20 @@ import { Plane, Raycaster, Vector2, Vector3 } from 'three'
 import { CameraInput } from '../camera/cameraInput'
 import {
   cameraLimits,
-  cameraPosition,
+  cameraPoseOverTerrain,
   defaultCameraState,
   type CameraState,
   type GroundPoint,
 } from '../camera/overheadCamera'
 import type { Scene } from '../scene/scene'
+import { heightAt } from '../terrain/layers'
+import { raycastTerrain } from '../terrain/pick'
+import type { TerrainEditor } from '../terrain/terrainEditor'
 
 const GROUND = new Plane(new Vector3(0, 1, 0), 0)
 
 /** Owns the camera state and input for a scene; resets when a different scene is shown. */
-export function CameraRig({ scene }: { scene: Scene }) {
+export function CameraRig({ scene, terrain }: { scene: Scene; terrain: TerrainEditor }) {
   const camera = useThree((s) => s.camera)
   const gl = useThree((s) => s.gl)
   const element = gl.domElement as HTMLCanvasElement
@@ -37,6 +40,9 @@ export function CameraRig({ scene }: { scene: Scene }) {
       if (r.width === 0 || r.height === 0) return null
       ndc.set(((clientX - r.left) / r.width) * 2 - 1, -((clientY - r.top) / r.height) * 2 + 1)
       raycaster.setFromCamera(ndc, camera)
+      const onTerrain = raycastTerrain(terrain.layers.heights, raycaster.ray.origin, raycaster.ray.direction)
+      if (onTerrain) return { x: onTerrain.x, z: onTerrain.z }
+      // Off the scene: zoom toward the y = 0 plane instead.
       return raycaster.ray.intersectPlane(GROUND, hit) ? { x: hit.x, z: hit.z } : null
     }
     const input = new CameraInput({
@@ -53,14 +59,13 @@ export function CameraRig({ scene }: { scene: Scene }) {
       input.dispose()
       if (inputRef.current === input) inputRef.current = null
     }
-  }, [element, camera, limits])
+  }, [element, camera, limits, terrain])
 
   useFrame((_, delta) => {
     inputRef.current?.update(Math.min(delta, 0.1))
-    const s = stateRef.current
-    const p = cameraPosition(s)
-    camera.position.set(p.x, p.y, p.z)
-    camera.lookAt(s.target.x, 0, s.target.z)
+    const { position, lookAt } = cameraPoseOverTerrain(stateRef.current, (x, z) => heightAt(terrain.layers.heights, x, z))
+    camera.position.set(position.x, position.y, position.z)
+    camera.lookAt(lookAt.x, lookAt.y, lookAt.z)
   })
 
   return null

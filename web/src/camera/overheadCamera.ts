@@ -86,3 +86,19 @@ export function cameraPosition(s: CameraState): { x: number; y: number; z: numbe
     z: s.target.z + horizontal * Math.cos(s.yaw),
   }
 }
+
+/**
+ * Camera pose over sculpted terrain: the orbit is centred on the ground height under the target, and the camera
+ * never goes below the ground under it plus `clearance` metres.
+ */
+export function cameraPoseOverTerrain(
+  s: CameraState,
+  groundAt: (x: number, z: number) => number,
+  clearance = 2,
+): { position: { x: number; y: number; z: number }; lookAt: { x: number; y: number; z: number } } {
+  const ground = groundAt(s.target.x, s.target.z)
+  const p = cameraPosition(s)
+  const position = { x: p.x, y: p.y + ground, z: p.z }
+  position.y = Math.max(position.y, groundAt(position.x, position.z) + clearance)
+  return { position, lookAt: { x: s.target.x, y: ground, z: s.target.z } }
+}

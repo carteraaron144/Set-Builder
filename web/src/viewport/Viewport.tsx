@@ -2,11 +2,21 @@ import { Canvas } from '@react-three/fiber'
 import { useEffect, useMemo, useRef } from 'react'
 import { WebGPURenderer } from 'three/webgpu'
 import type { Scene } from '../scene/scene'
+import type { TerrainEditor } from '../terrain/terrainEditor'
 import { CameraRig } from './CameraRig'
-import { FlatTerrain } from './FlatTerrain'
+import { BrushRig } from './BrushRig'
 import { browserSupport, detectSupport, forcedBackend, type RenderBackend } from './renderBackend'
+import { TerrainMesh } from './TerrainMesh'
 
-export function Viewport({ scene, onBackend }: { scene: Scene; onBackend(b: RenderBackend): void }) {
+export function Viewport({
+  scene,
+  terrain,
+  onBackend,
+}: {
+  scene: Scene
+  terrain: TerrainEditor
+  onBackend(b: RenderBackend): void
+}) {
   const forceWebGL = useMemo(() => forcedBackend(window.location.search) === 'webgl2', [])
   const support = useMemo(() => {
     const env = browserSupport()
@@ -47,14 +57,16 @@ export function Viewport({ scene, onBackend }: { scene: Scene; onBackend(b: Rend
           intensity={2.2}
           castShadow
           shadow-mapSize={[2048, 2048]}
-          shadow-camera-left={-scene.size / 2}
-          shadow-camera-right={scene.size / 2}
-          shadow-camera-top={scene.size / 2}
-          shadow-camera-bottom={-scene.size / 2}
+          shadow-camera-left={-scene.size * 0.75}
+          shadow-camera-right={scene.size * 0.75}
+          shadow-camera-top={scene.size * 0.75}
+          shadow-camera-bottom={-scene.size * 0.75}
           shadow-camera-far={scene.size * 4}
         />
-        <FlatTerrain size={scene.size} />
-        <CameraRig scene={scene} />
+        <CameraRig scene={scene} terrain={terrain} />
+        {/* BrushRig before TerrainMesh: a frame's dab is meshed in the same frame. */}
+        <BrushRig terrain={terrain} />
+        <TerrainMesh terrain={terrain} />
       </Canvas>
     </div>
   )
