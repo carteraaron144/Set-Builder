@@ -314,7 +314,7 @@ describe('exportCurrent', () => {
   it('downloads <slug>.glb and reports its size', async () => {
     const { store, deps, download } = setup()
     const writeGlb = vi.fn(async () => new Uint8Array(3 * 1024 * 1024))
-    await exportCurrent({ ...deps, library: null, scatter: null, writeGlb }, EXPORT_DEFAULTS)
+    await exportCurrent({ ...deps, library: null, writeGlb }, EXPORT_DEFAULTS)
     expect(download).toHaveBeenCalledTimes(1)
     expect(download.mock.calls[0][0]).toBe('my-scene.glb')
     expect(store.getState().message).toEqual({ kind: 'info', text: 'Exported my-scene.glb (3.0 MB)' })
@@ -323,9 +323,30 @@ describe('exportCurrent', () => {
   it('reports an exporter failure and leaves the scene untouched', async () => {
     const { store, deps, download } = setup()
     const before = store.getState().scene
-    await exportCurrent({ ...deps, library: null, scatter: null, writeGlb: async () => Promise.reject(new Error('out of memory')) }, EXPORT_DEFAULTS)
+    await exportCurrent({ ...deps, library: null, writeGlb: async () => Promise.reject(new Error('out of memory')) }, EXPORT_DEFAULTS)
     expect(download).not.toHaveBeenCalled()
     expect(store.getState().message).toEqual({ kind: 'error', text: "Couldn't export the scene: out of memory" })
     expect(store.getState().scene).toBe(before)
+  })
+})
+
+describe('exportCurrent scatter', () => {
+  it('exports scatter generated from the current layers, not from the live viewport state', async () => {
+    const { loadBasicsLibrary } = await import('../test/basicsLibrary')
+    const { assetInfoOf } = await import('../assets/assetLibrary')
+    const { rulesFor } = await import('../scatter/rules')
+    const { scatterChunk } = await import('../scatter/scatter')
+    const library = await loadBasicsLibrary()
+    const { store, deps } = setup({ scene: createScene({ size: 64, name: 'Fresh export', seed: 5 }) })
+    const { terrain, scene } = store.getState()
+    terrain.beginStroke({ tool: 'paint', biome: 'forest' }, { radius: 20, strength: 1, falloff: 0 }, { x: 0, z: 0 })
+    terrain.dab({ x: 0, z: 0 }, 1, false)
+    terrain.endStroke()
+    let root: import('three').Object3D | null = null
+    await exportCurrent({ ...deps, library, writeGlb: async (r) => ((root = r), new Uint8Array(4)) }, { grouping: 'element', collision: false, includeGrass: true })
+    const rules = rulesFor(scene.generatorVersion)
+    const expected = [0, 1, 2, 3].reduce((a, c) => a + scatterChunk({ layers: terrain.layers, seed: scene.seed, rules, exclusion: null }, c, assetInfoOf(library)).instances.length, 0)
+    expect(expected).toBeGreaterThan(0)
+    expect(root!.getObjectByName('scatter')!.children).toHaveLength(expected)
   })
 })

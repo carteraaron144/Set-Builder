@@ -106,8 +106,7 @@ export default function App() {
         <ExportDialog
           onCancel={() => setDialog(null)}
           onExport={async (options) => {
-            const scatter = useEditorStore.getState().scatterManager
-            await exportCurrent({ ...deps, library, scatter }, options)
+            await exportCurrent({ ...deps, library }, options)
             setDialog(null)
           }}
         />
