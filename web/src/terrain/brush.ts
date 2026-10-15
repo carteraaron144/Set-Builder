@@ -2,6 +2,7 @@ import {
   BIOME_IDS,
   BIOME_SPACING,
   clipRect,
+  cropRect,
   HEIGHT_SPACING,
   MAX_HEIGHT,
   MIN_HEIGHT,
@@ -80,9 +81,10 @@ export function sculpt(
   const half = h.size / 2
   const sign = dab.invert ? -1 : 1
 
-  // Smoothing reads a copy so the result doesn't depend on iteration order.
-  let source: Float32Array | null = null
-  if (mode === 'smooth') source = data.slice()
+  // Smoothing reads a copy of the rect plus a 1-sample border, so the result doesn't depend on iteration order.
+  const src = mode === 'smooth' ? clipRect({ x0: rect.x0 - 1, z0: rect.z0 - 1, x1: rect.x1 + 1, z1: rect.z1 + 1 }, res)! : null
+  const source = src ? cropRect(data, res, 1, src) : null
+  const srcW = src ? src.x1 - src.x0 + 1 : 0
 
   for (let j = rect.z0; j <= rect.z1; j++) {
     const z = -half + j * HEIGHT_SPACING
@@ -111,7 +113,7 @@ export function sculpt(
               const ii = i + di
               const jj = j + dj
               if (ii < 0 || jj < 0 || ii >= res || jj >= res) continue
-              sum += source![jj * res + ii]
+              sum += source![(jj - src!.z0) * srcW + (ii - src!.x0)]
               n++
             }
           v += (sum / n - v) * k

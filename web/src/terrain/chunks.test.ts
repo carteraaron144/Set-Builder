@@ -8,7 +8,7 @@ import {
   chunksForHeightRect,
   updateChunkGeometry,
 } from './chunks'
-import { createFlatLayers, type TerrainLayers } from './layers'
+import { biomeWeightsAt, createFlatLayers, quantizeWeights, type TerrainLayers } from './layers'
 import { DEFAULT_PALETTE, type RGB } from './palette'
 
 const vertex = (positions: Float32Array, vi: number, vj: number) => {
@@ -111,5 +111,24 @@ describe('chunk geometry', () => {
     expect(g.indices).toBe(indices)
     expect([...g.positions]).toEqual([...fresh.positions])
     expect([...g.colors]).toEqual([...fresh.colors])
+  })
+
+  it('blends biomes bilinearly at every vertex, including the ones between biome samples', () => {
+    const l = createFlatLayers(64)
+    let seed = 5
+    const rand = () => ((seed = (seed * 1103515245 + 12345) % 2147483648) / 2147483648)
+    for (let o = 0; o < l.biomes.data.length; o += 4) {
+      const w = [rand(), rand(), rand(), rand()]
+      const sum = w.reduce((a, c) => a + c, 0)
+      quantizeWeights(w.map((v) => v / sum), l.biomes.data, o)
+    }
+    for (const chunk of [0, 3]) {
+      const g = buildChunkGeometry(l, chunk, DEFAULT_PALETTE)
+      for (let k = 0; k < CHUNK_VERTS * CHUNK_VERTS; k++) {
+        const w = biomeWeightsAt(l.biomes, g.positions[k * 3], g.positions[k * 3 + 2])
+        const expected = [0, 1, 2].map((c) => w.reduce((a, wi, b) => a + wi * DEFAULT_PALETTE.biomes[b][c], 0))
+        for (let c = 0; c < 3; c++) expect(g.colors[k * 3 + c]).toBeCloseTo(expected[c], 5)
+      }
+    }
   })
 })
