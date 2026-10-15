@@ -2,6 +2,7 @@ import type { StoreApi } from 'zustand'
 import type { SceneStore } from '../persistence/sceneStore'
 import { createScene, type SceneSize } from '../scene/scene'
 import { readSceneFile, SCENE_FILE_EXTENSION, SceneFileError, writeSceneFile } from '../scene/sceneFile'
+import { createFlatLayers } from '../terrain/layers'
 import type { EditorState } from './editorStore'
 
 export interface ActionDeps {
@@ -70,7 +71,7 @@ export async function openScene(deps: ActionDeps, id: string): Promise<void> {
 export async function uploadSceneFile(deps: ActionDeps, file: File): Promise<void> {
   let scene
   try {
-    scene = readSceneFile(new Uint8Array(await file.arrayBuffer()))
+    scene = readSceneFile(new Uint8Array(await file.arrayBuffer())).scene
   } catch (e) {
     const text =
       e instanceof SceneFileError
@@ -99,7 +100,7 @@ export function sceneFilename(name: string): string {
 
 export function downloadCurrent(deps: ActionDeps): void {
   const { scene } = deps.store.getState()
-  deps.download(sceneFilename(scene.name), writeSceneFile(scene))
+  deps.download(sceneFilename(scene.name), writeSceneFile(scene, createFlatLayers(scene.size)))
 }
 
 /** On startup: shows the newest saved scene, else keeps the new one. Storage problems are left for Save to report. */

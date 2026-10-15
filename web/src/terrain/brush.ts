@@ -5,6 +5,7 @@ import {
   HEIGHT_SPACING,
   MAX_HEIGHT,
   MIN_HEIGHT,
+  quantizeWeights,
   type BiomeId,
   type BiomeMap,
   type Heightmap,
@@ -126,20 +127,6 @@ export function sculpt(
   return rect
 }
 
-/** Writes floats that sum to 1 as bytes that sum to exactly 255 (largest remainder). */
-function quantize(weights: number[], out: Uint8Array, offset: number): void {
-  const scaled = weights.map((w) => w * 255)
-  const floors = scaled.map(Math.floor)
-  let remainder = 255 - floors.reduce((a, c) => a + c, 0)
-  const order = [0, 1, 2, 3].sort((a, c) => scaled[c] - floors[c] - (scaled[a] - floors[a]))
-  for (const c of order) {
-    if (remainder <= 0) break
-    floors[c]++
-    remainder--
-  }
-  for (let c = 0; c < 4; c++) out[offset + c] = floors[c]
-}
-
 /** Paints (or with invert, erases toward meadow) one biome dab in place. */
 export function paint(m: BiomeMap, biome: BiomeId, b: BrushSettings, dab: Dab): Rect | null {
   const channel = BIOME_IDS.indexOf(biome)
@@ -165,7 +152,7 @@ export function paint(m: BiomeMap, biome: BiomeId, b: BrushSettings, dab: Dab): 
       } else {
         for (let c = 0; c < 4; c++) target[c] = c === channel ? 1 : 0
       }
-      quantize(
+      quantizeWeights(
         old.map((o, c) => o + (target[c] - o) * k),
         m.data,
         offset,

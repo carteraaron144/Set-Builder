@@ -117,3 +117,17 @@ export function cloneLayers(l: TerrainLayers): TerrainLayers {
     biomes: { ...l.biomes, data: l.biomes.data.slice() },
   }
 }
+
+/** Writes 4 weights that sum to 1 as bytes that sum to exactly 255 (largest remainder). */
+export function quantizeWeights(weights: number[], out: Uint8Array, offset: number): void {
+  const scaled = weights.map((w) => w * 255)
+  const floors = scaled.map(Math.floor)
+  let remainder = 255 - floors.reduce((a, c) => a + c, 0)
+  const order = [0, 1, 2, 3].sort((a, c) => scaled[c] - floors[c] - (scaled[a] - floors[a]))
+  for (const c of order) {
+    if (remainder <= 0) break
+    floors[c]++
+    remainder--
+  }
+  for (let c = 0; c < 4; c++) out[offset + c] = floors[c]
+}

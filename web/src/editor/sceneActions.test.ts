@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { openSceneStore, StorageUnavailableError, type SceneStore } from '../persistence/sceneStore'
 import { createScene, type Scene } from '../scene/scene'
 import { readSceneFile, writeSceneFile } from '../scene/sceneFile'
+import { createFlatLayers } from '../terrain/layers'
 import { createEditorStore } from './editorStore'
 import {
   downloadCurrent,
@@ -60,7 +61,7 @@ describe('saveCurrent', () => {
     expect(download).toHaveBeenCalledTimes(1)
     const [filename, bytes] = download.mock.calls[0]
     expect(filename).toBe('my-scene.setbuilder')
-    expect(readSceneFile(bytes)).toEqual(store.getState().scene)
+    expect(readSceneFile(bytes).scene).toEqual(store.getState().scene)
   })
 
   it('reports a failed write as a storage error', async () => {
@@ -126,12 +127,12 @@ describe('replacing a dirty scene', () => {
     const declined = setup({ confirm: false })
     declined.store.getState().rename('Edited')
     const before = declined.store.getState().scene
-    await uploadSceneFile(declined.deps, fileOf(writeSceneFile(other)))
+    await uploadSceneFile(declined.deps, fileOf(writeSceneFile(other, createFlatLayers(other.size))))
     expect(declined.store.getState().scene).toBe(before)
 
     const accepted = setup({ confirm: true })
     accepted.store.getState().rename('Edited')
-    await uploadSceneFile(accepted.deps, fileOf(writeSceneFile(other)))
+    await uploadSceneFile(accepted.deps, fileOf(writeSceneFile(other, createFlatLayers(other.size))))
     expect(accepted.store.getState().scene).toEqual(other)
     expect(accepted.store.getState().dirty).toBe(false)
   })
@@ -151,7 +152,7 @@ describe('uploadSceneFile errors', () => {
   it('names a newer format version', async () => {
     const { store, deps } = setup()
     const before = store.getState().scene
-    const newer = zipSync({ 'scene.json': strToU8(JSON.stringify({ ...before, formatVersion: 2 })) })
+    const newer = zipSync({ 'scene.json': strToU8(JSON.stringify({ ...before, formatVersion: 3 })) })
     await uploadSceneFile(deps, fileOf(newer))
     expect(store.getState().scene).toBe(before)
     expect(store.getState().message).toEqual({ kind: 'error', text: 'That scene was made with a newer version of Set Builder.' })

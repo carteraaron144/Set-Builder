@@ -1,12 +1,13 @@
 import { describe, expect, it } from 'vitest'
-import { createScene, renameScene, SCENE_FORMAT_VERSION, SCENE_SIZES } from './scene'
+import { createScene, GENERATOR_VERSION, renameScene, SCENE_FORMAT_VERSION, SCENE_SIZES } from './scene'
 
 const NOW = new Date('2026-10-15T12:00:00Z')
 
 describe('createScene', () => {
   it('builds a scene from explicit values', () => {
     expect(createScene({ size: 128, now: NOW, id: 'a', seed: 7 })).toEqual({
-      formatVersion: 1,
+      formatVersion: 2,
+      generatorVersion: 1,
       id: 'a',
       name: 'Untitled scene',
       size: 128,
@@ -36,7 +37,8 @@ describe('createScene', () => {
 
   it('exposes the sizes and format version', () => {
     expect(SCENE_SIZES).toEqual([64, 128, 256])
-    expect(SCENE_FORMAT_VERSION).toBe(1)
+    expect(SCENE_FORMAT_VERSION).toBe(2)
+    expect(GENERATOR_VERSION).toBe(1)
   })
 })
 
