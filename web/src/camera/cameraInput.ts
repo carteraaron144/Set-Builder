@@ -171,7 +171,7 @@ export class CameraInput {
       const k = s.distance * DRAG_PAN_PER_PIXEL
       this.opts.setState(pan(s, -dx * k, dy * k, l))
     } else {
-      this.opts.setState(tilt(orbit(s, dx * DRAG_ORBIT_PER_PIXEL), dy * DRAG_TILT_PER_PIXEL, l))
+      this.opts.setState(tilt(orbit(s, -dx * DRAG_ORBIT_PER_PIXEL), dy * DRAG_TILT_PER_PIXEL, l))
     }
   }
 

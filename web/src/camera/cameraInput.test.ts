@@ -134,11 +134,11 @@ describe('CameraInput pointer', () => {
     expectState(state, zoom(start, 1 / 0.9, limits))
   })
 
-  it('right-drag of 100 px horizontally orbits by 30°', () => {
+  it('right-drag of 100 px to the right orbits by -30°', () => {
     pointer('pointerdown', element, { button: 2, clientX: 100, clientY: 100 })
     pointer('pointermove', window, { buttons: 2, clientX: 200, clientY: 100 })
     pointer('pointerup', window, { button: 2, clientX: 200, clientY: 100 })
-    expectState(state, orbit(start, deg(30)))
+    expectState(state, orbit(start, -deg(30)))
   })
 
   it('right-drag vertically tilts 0.2° per pixel', () => {
