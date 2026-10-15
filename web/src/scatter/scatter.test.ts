@@ -211,8 +211,11 @@ describe('face placement', () => {
       const half = (a.width / 2) * i.scale[0]
       for (let t = 0.6; t < L - 0.6; t += 0.5) {
         const p = [i.x + up[0] * t, i.y + up[1] * t, i.z + up[2] * t]
-        expect(p[1], 'axis inside the wall').toBeLessThanOrEqual(heightAt(l.heights, p[0], p[2]) + 0.05)
-        const front = [p[0] + n[0] * half * 2, p[1] + n[1] * half * 2, p[2] + n[2] * half * 2]
+        // Back line: the axis offset by the pillar's radius toward the wall must be embedded (no gap behind it).
+        const back = [p[0] - n[0] * half * 0.9, p[1] - n[1] * half * 0.9, p[2] - n[2] * half * 0.9]
+        expect(back[1], 'back line inside the wall').toBeLessThanOrEqual(heightAt(l.heights, back[0], back[2]) + 0.05)
+        // The pillar's own front face (its radius out from the axis) must stand proud of the wall: visible, not buried.
+        const front = [p[0] + n[0] * half * 0.9, p[1] + n[1] * half * 0.9, p[2] + n[2] * half * 0.9]
         expect(front[1], 'front outside the wall').toBeGreaterThan(heightAt(l.heights, front[0], front[2]) - 0.05)
       }
     }

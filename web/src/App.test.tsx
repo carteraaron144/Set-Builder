@@ -7,6 +7,10 @@ import { MESSAGES } from './editor/sceneActions'
 
 const viewportMock = vi.hoisted(() => ({ fail: false }))
 
+vi.mock('./assets/assetLibrary', () => ({
+  loadAssetLibrary: async () => ({ assets: new Map(), materials: {}, packs: [], problems: [] }),
+}))
+
 vi.mock('./viewport/Viewport', () => ({
   Viewport: () => {
     if (viewportMock.fail) throw new Error('GPU device lost')

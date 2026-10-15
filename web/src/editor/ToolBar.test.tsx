@@ -54,4 +54,13 @@ describe('ToolBar', () => {
     await userEvent.click(redo)
     expect(useEditorStore.getState().canUndo).toBe(true)
   })
+
+  it('toggles scatter visibility', async () => {
+    render(<ToolBar />)
+    const toggle = screen.getByRole('button', { name: 'Scatter' })
+    expect(toggle).toHaveAttribute('aria-pressed', 'true')
+    await userEvent.click(toggle)
+    expect(useEditorStore.getState().scatterVisible).toBe(false)
+    expect(toggle).toHaveAttribute('aria-pressed', 'false')
+  })
 })

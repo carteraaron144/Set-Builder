@@ -1,20 +1,24 @@
 import { Canvas } from '@react-three/fiber'
 import { useEffect, useMemo, useRef } from 'react'
 import { WebGPURenderer } from 'three/webgpu'
+import type { AssetLibrary } from '../assets/assetLibrary'
 import type { Scene } from '../scene/scene'
 import type { TerrainEditor } from '../terrain/terrainEditor'
 import { CameraRig } from './CameraRig'
 import { BrushRig } from './BrushRig'
 import { browserSupport, detectSupport, forcedBackend, type RenderBackend } from './renderBackend'
+import { ScatterMesh } from './ScatterMesh'
 import { TerrainMesh } from './TerrainMesh'
 
 export function Viewport({
   scene,
   terrain,
+  library,
   onBackend,
 }: {
   scene: Scene
   terrain: TerrainEditor
+  library?: AssetLibrary | null
   onBackend(b: RenderBackend): void
 }) {
   const forceWebGL = useMemo(() => forcedBackend(window.location.search) === 'webgl2', [])
@@ -67,6 +71,7 @@ export function Viewport({
         {/* BrushRig before TerrainMesh: a frame's dab is meshed in the same frame. */}
         <BrushRig terrain={terrain} />
         <TerrainMesh terrain={terrain} />
+        {library && <ScatterMesh terrain={terrain} scene={scene} library={library} />}
       </Canvas>
     </div>
   )

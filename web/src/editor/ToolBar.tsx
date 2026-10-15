@@ -18,6 +18,8 @@ export function ToolBar() {
   const canRedo = useEditorStore((s) => s.canRedo)
   const undo = useEditorStore((s) => s.undo)
   const redo = useEditorStore((s) => s.redo)
+  const scatterVisible = useEditorStore((s) => s.scatterVisible)
+  const setScatterVisible = useEditorStore((s) => s.setScatterVisible)
 
   return (
     <div className="tool-bar">
@@ -33,6 +35,16 @@ export function ToolBar() {
             </button>
           ),
         )}
+      </div>
+      <div className="tool-group">
+        <button
+          type="button"
+          aria-pressed={scatterVisible}
+          onClick={() => setScatterVisible(!scatterVisible)}
+          title="Show or hide trees, rocks and plants"
+        >
+          Scatter
+        </button>
       </div>
       <div className="tool-group">
         <button type="button" onClick={undo} disabled={!canUndo} title="Undo (Ctrl/Cmd+Z)">

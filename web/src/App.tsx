@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
+import { loadAssetLibrary, type AssetLibrary } from './assets/assetLibrary'
 import { browserDeps } from './editor/browserDeps'
 import { useEditorStore } from './editor/editorStore'
 import { BrushPanel } from './editor/BrushPanel'
@@ -20,6 +22,8 @@ import { ViewportErrorBoundary } from './viewport/ViewportErrorBoundary'
 
 type Dialog = 'new' | 'open' | null
 
+export const SCATTER_ASSETS_MESSAGE = "Scatter assets couldn't be loaded; showing terrain only."
+
 export default function App() {
   const deps = useMemo(() => browserDeps(useEditorStore), [])
   const scene = useEditorStore((s) => s.scene)
@@ -27,6 +31,22 @@ export default function App() {
   const dirty = useEditorStore((s) => s.dirty)
   const setRenderBackend = useEditorStore((s) => s.setRenderBackend)
   const [dialog, setDialog] = useState<Dialog>(null)
+  const [library, setLibrary] = useState<AssetLibrary | null>(null)
+
+  useEffect(() => {
+    let live = true
+    void loadAssetLibrary({
+      fetch: (input, init) => fetch(input, init),
+      parseGlb: (bytes) => new GLTFLoader().parseAsync(bytes, '').then((g) => g.scene),
+    }).then((lib) => {
+      if (!live) return
+      setLibrary(lib)
+      if (lib.problems.length) useEditorStore.getState().setMessage({ kind: 'info', text: SCATTER_ASSETS_MESSAGE })
+    })
+    return () => {
+      live = false
+    }
+  }, [])
 
   useEffect(() => {
     void loadInitialScene(deps)
@@ -65,7 +85,7 @@ export default function App() {
       />
       <main className="viewport-area">
         <ViewportErrorBoundary>
-          <Viewport scene={scene} terrain={terrain} onBackend={setRenderBackend} />
+          <Viewport scene={scene} terrain={terrain} library={library} onBackend={setRenderBackend} />
         </ViewportErrorBoundary>
         <BrushPanel />
         <ToolBar />

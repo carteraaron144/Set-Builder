@@ -1,7 +1,7 @@
 import type { PackManifest } from '../assets/packManifest'
 import type { SceneSize } from '../scene/scene'
 import { CHUNK_SIZE, chunkCount } from '../terrain/chunks'
-import { BIOME_IDS, biomeWeightsAt, heightAt, type Heightmap, type TerrainLayers } from '../terrain/layers'
+import { BIOME_IDS, heightAt, type Heightmap, type TerrainLayers } from '../terrain/layers'
 import type { Vec3 } from '../terrain/pick'
 import { hash4, unit } from './hash'
 import type { ScatterRule, ScatterRules } from './rules'
@@ -72,6 +72,20 @@ function gradient(h: Heightmap, x: number, z: number, d = 0.25): [number, number
   return [(heightAt(h, x + d, z) - heightAt(h, x - d, z)) / (2 * d), (heightAt(h, x, z + d) - heightAt(h, x, z - d)) / (2 * d)]
 }
 
+/** One biome channel, bilinear (0..1), without allocating. */
+function biomeWeight(b: TerrainLayers['biomes'], x: number, z: number, channel: number): number {
+  const res = b.resolution
+  const gx = Math.min(res - 1, Math.max(0, x + b.size / 2))
+  const gz = Math.min(res - 1, Math.max(0, z + b.size / 2))
+  const i0 = Math.min(res - 2, Math.floor(gx))
+  const j0 = Math.min(res - 2, Math.floor(gz))
+  const fx = gx - i0
+  const fz = gz - j0
+  const d = b.data
+  const at = (i: number, j: number) => d[(j * res + i) * 4 + channel]
+  return ((at(i0, j0) * (1 - fx) + at(i0 + 1, j0) * fx) * (1 - fz) + (at(i0, j0 + 1) * (1 - fx) + at(i0 + 1, j0 + 1) * fx) * fz) / 255
+}
+
 const slopeAt = (h: Heightmap, x: number, z: number, d = 0.25) => Math.atan(Math.hypot(...gradient(h, x, z, d)))
 /** Narrow window for wall marching, so foot and top land on the real slope edges. */
 const WALL_WINDOW = 0.05
@@ -106,7 +120,14 @@ export function measureWall(h: Heightmap, x: number, z: number, minSlopeDeg: num
   }
   const foot = walk(-1)
   const top = walk(1)
-  const up = normalize({ x: top.x - foot.x, y: top.y - foot.y, z: top.z - foot.z })
+  // Uphill fall-line tangent, measured with the narrow window halfway up the face (always on the real slope), keeps
+  // pillars parallel to the face on ramps, cones and stepped walls. Falls back to the foot-to-top line.
+  const [mx, mz] = gradient(h, (foot.x + top.x) / 2, (foot.z + top.z) / 2, WALL_WINDOW)
+  const gm = Math.hypot(mx, mz)
+  const up =
+    gm > Math.tan(min) * 0.5
+      ? normalize({ x: mx / gm, y: gm, z: mz / gm })
+      : normalize({ x: top.x - foot.x, y: top.y - foot.y, z: top.z - foot.z })
   let n = normalize({ x: -gx, y: 1, z: -gz })
   const dot = n.x * up.x + n.y * up.y + n.z * up.z
   n = normalize({ x: n.x - up.x * dot, y: n.y - up.y * dot, z: n.z - up.z * dot })
@@ -158,7 +179,7 @@ interface Candidate {
 
 /** Evaluates candidates lazily and caches them for one scatter call. */
 class Field {
-  private readonly cache = new Map<string, Candidate | null>()
+  private readonly cache = new Map<number, Candidate | null>()
   private readonly cell: number[]
   private readonly half: number
   private readonly inp: ScatterInputs
@@ -180,7 +201,8 @@ class Field {
 
   /** The surviving candidate of a rule's cell, or null. */
   survivor(rule: number, ci: number, cj: number): Candidate | null {
-    const k = `${rule}:${ci}:${cj}`
+    // Numeric key: cells stay within ±2048 of the origin for any scene size and spacing in use.
+    const k = (rule * 4096 + ci + 2048) * 4096 + cj + 2048
     const hit = this.cache.get(k)
     if (hit !== undefined) return hit
     const c = this.evaluate(rule, ci, cj)
@@ -202,7 +224,7 @@ class Field {
       const j = Math.round(z + this.half)
       if (exclusion[j * res + i]) return null
     }
-    const weight = r.biome === 'any' ? 1 : biomeWeightsAt(layers.biomes, x, z)[BIOME_IDS.indexOf(r.biome)]
+    const weight = r.biome === 'any' ? 1 : biomeWeight(layers.biomes, x, z, BIOME_IDS.indexOf(r.biome))
     if (unit(h(SALT.keep)) >= r.density * weight * cs * cs) return null
     const y = heightAt(layers.heights, x, z)
     if (y < r.minHeight || y > r.maxHeight) return null
@@ -272,12 +294,14 @@ class Field {
     const lean = axisAngle(za, (h(SALT.tilt) * 2 - 1) * r.maxTiltDeg * DEG)
     const spin = axisAngle(ya, (h(SALT.yaw) * 2 - 1) * r.maxTiltDeg * DEG)
     const quat = quatMul(quatMul(lean, spin), basisQuat(xa, ya, za))
-    // Base: sinkDepth below the foot along the axis, pushed sinkDepth into the face.
+    // Base: sinkDepth below the foot along the axis. The axis sits 40% of the pillar's radius inside the face, so its
+    // back is embedded (no gap) and its front stands proud.
+    const push = 0.4 * (((info?.width ?? 0.7) / 2) * s)
     return {
       rule,
-      x: w.foot.x - ya.x * sink - za.x * sink,
-      y: w.foot.y - ya.y * sink - za.y * sink,
-      z: w.foot.z - ya.z * sink - za.z * sink,
+      x: w.foot.x - ya.x * sink - za.x * push,
+      y: w.foot.y - ya.y * sink - za.y * push,
+      z: w.foot.z - ya.z * sink - za.z * push,
       quat,
       scale: [s, length, s],
       priority: c.priority,
