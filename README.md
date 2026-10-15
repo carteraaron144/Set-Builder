@@ -22,6 +22,24 @@ Run both, then open http://localhost:5173 (Vite proxies `/api` and `/packs` to t
 
 Add `?renderer=webgl2` to the URL to force the WebGL2 backend (to check the fallback, or work around a WebGPU driver problem).
 
+## Controls
+
+| Action | Mouse | Keys |
+| --- | --- | --- |
+| Pan | Middle-drag, or move to the screen edge | WASD / arrows |
+| Orbit | Right-drag | Q / E |
+| Zoom | Wheel (toward the cursor) | R / F |
+| Tilt | Right-drag vertically | Page Up / Page Down |
+| Pick a tool | Bottom toolbar (Terrain, Paint) | Esc deselects |
+| Apply the brush | Left-drag | |
+| Invert (lower, erase) | Alt-drag, or the panel's Invert toggle | |
+| Brush size | Size slider | `[` / `]` |
+| Undo / redo | Toolbar buttons | Ctrl/Cmd+Z, Ctrl/Cmd+Shift+Z (or Ctrl+Y) |
+| Save in this browser | Save | Ctrl/Cmd+S |
+
+Terrain modes are raise, lower, smooth, flatten (to the height where the stroke started) and noise. Paint brushes the
+meadow, forest, rocky and swamp biomes; steep slopes show rock automatically.
+
 ## Test
 
 - `cd web && npm test`

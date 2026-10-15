@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { browserDeps } from './editor/browserDeps'
 import { useEditorStore } from './editor/editorStore'
+import { BrushPanel } from './editor/BrushPanel'
 import { NewSceneDialog } from './editor/NewSceneDialog'
 import { OpenSceneDialog } from './editor/OpenSceneDialog'
 import {
@@ -12,6 +13,7 @@ import {
   uploadSceneFile,
 } from './editor/sceneActions'
 import { installEditorShortcuts } from './editor/shortcuts'
+import { ToolBar } from './editor/ToolBar'
 import { TopBar } from './editor/TopBar'
 import { Viewport } from './viewport/Viewport'
 import { ViewportErrorBoundary } from './viewport/ViewportErrorBoundary'
@@ -65,6 +67,8 @@ export default function App() {
         <ViewportErrorBoundary>
           <Viewport scene={scene} terrain={terrain} onBackend={setRenderBackend} />
         </ViewportErrorBoundary>
+        <BrushPanel />
+        <ToolBar />
       </main>
       {dialog === 'new' && (
         <NewSceneDialog
