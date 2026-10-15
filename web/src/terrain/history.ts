@@ -1,0 +1,65 @@
+import type { Rect } from './layers'
+
+/** The before and after of the rect one stroke changed, in one layer. */
+export interface LayerPatch {
+  layer: 'heights' | 'biomes'
+  rect: Rect
+  before: Float32Array | Uint8Array
+  after: Float32Array | Uint8Array
+}
+
+export const HISTORY_LIMITS = { maxStrokes: 100, maxBytes: 64 * 1024 * 1024 }
+
+const patchBytes = (p: LayerPatch) => p.before.byteLength + p.after.byteLength
+
+/** Undo/redo stacks of stroke patches, capped by count and memory (oldest dropped first). */
+export class StrokeHistory {
+  private readonly limits: { maxStrokes: number; maxBytes: number }
+  private readonly done: LayerPatch[] = []
+  private readonly undone: LayerPatch[] = []
+  private total = 0
+
+  constructor(limits = HISTORY_LIMITS) {
+    this.limits = limits
+  }
+
+  get canUndo(): boolean {
+    return this.done.length > 0
+  }
+
+  get canRedo(): boolean {
+    return this.undone.length > 0
+  }
+
+  get bytes(): number {
+    return this.total
+  }
+
+  push(p: LayerPatch): void {
+    for (const r of this.undone) this.total -= patchBytes(r)
+    this.undone.length = 0
+    this.done.push(p)
+    this.total += patchBytes(p)
+    while (this.done.length > this.limits.maxStrokes || (this.total > this.limits.maxBytes && this.done.length > 1)) {
+      this.total -= patchBytes(this.done.shift()!)
+    }
+  }
+
+  undo(): LayerPatch | undefined {
+    const p = this.done.pop()
+    if (p) this.undone.push(p)
+    return p
+  }
+
+  redo(): LayerPatch | undefined {
+    const p = this.undone.pop()
+    if (p) this.done.push(p)
+    return p
+  }
+
+  clear(): void {
+    this.done.length = 0
+    this.undone.length = 0
+    this.total = 0
+  }
+}
