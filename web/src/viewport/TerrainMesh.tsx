@@ -17,7 +17,7 @@ export function TerrainMesh({ terrain }: { terrain: TerrainEditor }) {
 
   const chunks = useMemo<Chunk[]>(() => {
     // A fresh build covers everything, so drop changes queued before it.
-    terrain.takeDirtyChunks()
+    terrain.takeDirtyChunks('mesh')
     const n = chunkCount(terrain.layers.heights.size)
     return Array.from({ length: n * n }, (_, i) => {
       const data = buildChunkGeometry(terrain.layers, i, DEFAULT_PALETTE)
@@ -32,7 +32,7 @@ export function TerrainMesh({ terrain }: { terrain: TerrainEditor }) {
   useEffect(() => () => chunks.forEach((c) => c.geometry.dispose()), [chunks])
 
   useFrame(() => {
-    for (const i of terrain.takeDirtyChunks()) {
+    for (const i of terrain.takeDirtyChunks('mesh')) {
       const c = chunks[i]
       if (!c) continue
       updateChunkGeometry(terrain.layers, i, DEFAULT_PALETTE, c.data)

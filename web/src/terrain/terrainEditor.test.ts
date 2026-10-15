@@ -180,3 +180,14 @@ describe('TerrainEditor terrace', () => {
     expect(same(read.layers.heights.data, ed.layers.heights.data)).toBe(true)
   })
 })
+
+describe('TerrainEditor dirty channels', () => {
+  it('reports the same chunks to the mesh and scatter channels independently', () => {
+    const { ed } = editor()
+    stroke(ed)
+    expect(ed.takeDirtyChunks('mesh')).toEqual([27, 28, 35, 36])
+    expect(ed.takeDirtyChunks('mesh')).toEqual([])
+    expect(ed.takeDirtyChunks('scatter')).toEqual([27, 28, 35, 36])
+    expect(ed.takeDirtyChunks()).toEqual([])
+  })
+})

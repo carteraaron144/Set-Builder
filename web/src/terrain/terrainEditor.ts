@@ -33,7 +33,8 @@ export class TerrainEditor {
   private readonly seed: number
   private readonly onChange: (c: TerrainChange) => void
   private readonly history = new StrokeHistory()
-  private readonly dirty = new Set<number>()
+  /** Dirty chunks per consumer: the terrain mesh and scatter each drain their own set. */
+  private readonly dirty = { mesh: new Set<number>(), scatter: new Set<number>() }
   private stroke: Stroke | null = null
 
   constructor(layers: TerrainLayers, seed: number, onChange: (c: TerrainChange) => void) {
@@ -122,9 +123,10 @@ export class TerrainEditor {
     return true
   }
 
-  takeDirtyChunks(): number[] {
-    const out = [...this.dirty].sort((a, b) => a - b)
-    this.dirty.clear()
+  takeDirtyChunks(channel: 'mesh' | 'scatter' = 'mesh'): number[] {
+    const set = this.dirty[channel]
+    const out = [...set].sort((a, b) => a - b)
+    set.clear()
     return out
   }
 
@@ -141,6 +143,9 @@ export class TerrainEditor {
   private markDirty(layer: 'heights' | 'biomes', rect: Rect): void {
     const size = this.layers.heights.size
     const chunks = layer === 'heights' ? chunksForHeightRect(rect, size) : chunksForBiomeRect(rect, size)
-    for (const c of chunks) this.dirty.add(c)
+    for (const c of chunks) {
+      this.dirty.mesh.add(c)
+      this.dirty.scatter.add(c)
+    }
   }
 }

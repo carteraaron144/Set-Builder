@@ -31,6 +31,8 @@ export interface EditorState {
   biome: BiomeId
   brush: BrushSettings
   invertToggle: boolean
+  /** Scattered elements shown in the viewport. */
+  scatterVisible: boolean
   /** Terrace step height in metres (0.5–5). */
   terraceStep: number
   canUndo: boolean
@@ -49,6 +51,7 @@ export interface EditorState {
   resizeBrush(factor: number): void
   setInvertToggle(v: boolean): void
   setTerraceStep(m: number): void
+  setScatterVisible(v: boolean): void
   undo(): void
   redo(): void
 }
@@ -80,6 +83,7 @@ const initializer =
       brush: { ...BRUSH_DEFAULTS },
       invertToggle: false,
       terraceStep: 1.5,
+      scatterVisible: true,
       canUndo: false,
       canRedo: false,
       replaceScene: (next, layers) =>
@@ -115,6 +119,7 @@ const initializer =
       resizeBrush: (factor) => get().setBrush({ radius: get().brush.radius * factor }),
       setInvertToggle: (invertToggle) => set({ invertToggle }),
       setTerraceStep: (m) => set({ terraceStep: clamp(m, 0.5, 5) }),
+      setScatterVisible: (scatterVisible) => set({ scatterVisible }),
       undo: () => {
         get().terrain.undo()
       },
