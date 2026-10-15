@@ -1,5 +1,6 @@
 package app.setbuilder.packs
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
 import tools.jackson.module.kotlin.jacksonObjectMapper
@@ -11,9 +12,11 @@ import kotlin.io.path.isRegularFile
 import kotlin.io.path.listDirectoryEntries
 import kotlin.io.path.name
 
-data class AssetPack(val id: String, val name: String, val version: String)
+data class AssetPack(val id: String, val name: String, val version: String, val source: String, val licence: String)
 
-private data class PackManifest(val name: String, val version: String)
+/** pack.json; fields the server doesn't need (such as `assets`) are ignored. Every pack must record its source and licence. */
+@JsonIgnoreProperties(ignoreUnknown = true)
+private data class PackManifest(val name: String, val version: String, val source: String? = null, val licence: String? = null)
 
 @Service
 class AssetPackService(private val props: AssetPackProperties) {
@@ -39,7 +42,11 @@ class AssetPackService(private val props: AssetPackProperties) {
 		}
 		return try {
 			val m = Files.newInputStream(manifest).use { mapper.readValue<PackManifest>(it) }
-			AssetPack(id = dir.name, name = m.name, version = m.version)
+			if (m.source.isNullOrBlank() || m.licence.isNullOrBlank()) {
+				log.warn("Skipping asset pack {}: pack.json needs a source and a licence", dir.name)
+				return null
+			}
+			AssetPack(id = dir.name, name = m.name, version = m.version, source = m.source, licence = m.licence)
 		} catch (e: Exception) {
 			log.warn("Skipping asset pack {}: unreadable pack.json ({})", dir.name, e.message)
 			null

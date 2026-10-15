@@ -1,0 +1,12 @@
+{
+	"nodes":[
+		{"id":"1f505d73072486e3","type":"file","file":"Pasted image 20261015145416.png","x":-485,"y":-398,"width":400,"height":360},
+		{"id":"5f5061b2469c2551","type":"file","file":"Pasted image 20261015145600.png","x":-67,"y":-394,"width":400,"height":221},
+		{"id":"0177edfbca0c7b5a","type":"file","file":"Pasted image 20261015145749.png","x":-485,"y":0,"width":400,"height":327},
+		{"id":"94a91ccfefd6b6fa","type":"text","text":"# Outdoors","x":-210,"y":-500,"width":250,"height":60},
+		{"id":"fa36077ac4c41518","type":"text","text":"# Indoors","x":800,"y":-500,"width":250,"height":60},
+		{"id":"e8b73f21db1dbe04","type":"file","file":"Pasted image 20261015150352.png","x":620,"y":-398,"width":400,"height":287},
+		{"id":"c097aae7a36a645e","x":-67,"y":-140,"width":400,"height":340,"type":"file","file":"Pasted image 20261015150921.png"}
+	],
+	"edges":[]
+}
