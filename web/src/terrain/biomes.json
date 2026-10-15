@@ -1,0 +1,9 @@
+{
+  "biomes": {
+    "meadow": "#7fa650",
+    "forest": "#4f7a3a",
+    "rocky": "#9a9182",
+    "swamp": "#5d6b45"
+  },
+  "rock": { "color": "#8a8178", "slopeStartDeg": 35, "slopeFullDeg": 50 }
+}

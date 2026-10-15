@@ -1,0 +1,110 @@
+import type { SceneSize } from '../scene/scene'
+import { biomeWeightsAt, HEIGHT_SPACING, type Rect, type TerrainLayers } from './layers'
+import type { TerrainPalette } from './palette'
+
+export const CHUNK_SIZE = 32 // metres
+export const CHUNK_VERTS = CHUNK_SIZE / HEIGHT_SPACING + 1 // 65 per side
+const CELLS = CHUNK_VERTS - 1
+
+export function chunkCount(size: SceneSize): number {
+  return size / CHUNK_SIZE
+}
+
+/** Chunks whose vertices (or slopes, which read ±1 sample) depend on samples in the rect. Sorted by index. */
+export function chunksForHeightRect(r: Rect, size: SceneSize): number[] {
+  const n = chunkCount(size)
+  const x0 = r.x0 - 1
+  const z0 = r.z0 - 1
+  const x1 = r.x1 + 1
+  const z1 = r.z1 + 1
+  const out: number[] = []
+  for (let cz = 0; cz < n; cz++) {
+    if (z0 > cz * CELLS + CELLS || z1 < cz * CELLS) continue
+    for (let cx = 0; cx < n; cx++) {
+      if (x0 > cx * CELLS + CELLS || x1 < cx * CELLS) continue
+      out.push(cz * n + cx)
+    }
+  }
+  return out
+}
+
+/** Biome samples are 1 m apart and blend over ±1 m, i.e. ±2 height samples. */
+export function chunksForBiomeRect(r: Rect, size: SceneSize): number[] {
+  return chunksForHeightRect({ x0: r.x0 * 2 - 2, z0: r.z0 * 2 - 2, x1: r.x1 * 2 + 2, z1: r.z1 * 2 + 2 }, size)
+}
+
+export interface ChunkGeometry {
+  positions: Float32Array
+  colors: Float32Array
+  indices: Uint16Array
+}
+
+function buildIndices(): Uint16Array {
+  const indices = new Uint16Array(CELLS * CELLS * 6)
+  let k = 0
+  for (let j = 0; j < CELLS; j++)
+    for (let i = 0; i < CELLS; i++) {
+      const a = j * CHUNK_VERTS + i
+      const b = a + CHUNK_VERTS
+      const c = a + 1
+      const d = b + 1
+      // Counter-clockwise seen from above (+y).
+      indices.set([a, b, c, c, b, d], k)
+      k += 6
+    }
+  return indices
+}
+
+const smoothstep = (edge0: number, edge1: number, x: number) => {
+  const t = Math.min(1, Math.max(0, (x - edge0) / (edge1 - edge0)))
+  return t * t * (3 - 2 * t)
+}
+
+export function buildChunkGeometry(l: TerrainLayers, chunk: number, p: TerrainPalette): ChunkGeometry {
+  const g = {
+    positions: new Float32Array(CHUNK_VERTS * CHUNK_VERTS * 3),
+    colors: new Float32Array(CHUNK_VERTS * CHUNK_VERTS * 3),
+    indices: buildIndices(),
+  }
+  updateChunkGeometry(l, chunk, p, g)
+  return g
+}
+
+/** Rewrites positions and colours for a chunk in place (the index buffer never changes). */
+export function updateChunkGeometry(l: TerrainLayers, chunk: number, p: TerrainPalette, g: ChunkGeometry): void {
+  const { heights, biomes } = l
+  const res = heights.resolution
+  const h = heights.data
+  const n = chunkCount(heights.size)
+  const cx = chunk % n
+  const cz = Math.floor(chunk / n)
+  const half = heights.size / 2
+  for (let vj = 0; vj < CHUNK_VERTS; vj++) {
+    const j = cz * CELLS + vj
+    const z = -half + j * HEIGHT_SPACING
+    for (let vi = 0; vi < CHUNK_VERTS; vi++) {
+      const i = cx * CELLS + vi
+      const x = -half + i * HEIGHT_SPACING
+      const k = (vj * CHUNK_VERTS + vi) * 3
+      const y = h[j * res + i]
+      g.positions[k] = x
+      g.positions[k + 1] = y
+      g.positions[k + 2] = z
+
+      // Slope from central differences (one-sided at the scene edge).
+      const il = Math.max(0, i - 1)
+      const ir = Math.min(res - 1, i + 1)
+      const jd = Math.max(0, j - 1)
+      const ju = Math.min(res - 1, j + 1)
+      const dx = (h[j * res + ir] - h[j * res + il]) / ((ir - il) * HEIGHT_SPACING)
+      const dz = (h[ju * res + i] - h[jd * res + i]) / ((ju - jd) * HEIGHT_SPACING)
+      const rock = smoothstep(p.slopeStart, p.slopeFull, Math.atan(Math.hypot(dx, dz)))
+
+      const w = biomeWeightsAt(biomes, x, z)
+      for (let c = 0; c < 3; c++) {
+        const biome = w[0] * p.biomes[0][c] + w[1] * p.biomes[1][c] + w[2] * p.biomes[2][c] + w[3] * p.biomes[3][c]
+        g.colors[k + c] = biome + (p.rock[c] - biome) * rock
+      }
+    }
+  }
+}
