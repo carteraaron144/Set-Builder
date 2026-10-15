@@ -1,5 +1,5 @@
 import { Canvas } from '@react-three/fiber'
-import { useMemo, useRef } from 'react'
+import { useEffect, useMemo, useRef } from 'react'
 import { WebGPURenderer } from 'three/webgpu'
 import type { Scene } from '../scene/scene'
 import { CameraRig } from './CameraRig'
@@ -13,7 +13,9 @@ export function Viewport({ scene, onBackend }: { scene: Scene; onBackend(b: Rend
     return detectSupport(forceWebGL ? { webgl2: env.webgl2 } : env)
   }, [forceWebGL])
   const onBackendRef = useRef(onBackend)
-  onBackendRef.current = onBackend
+  useEffect(() => {
+    onBackendRef.current = onBackend
+  }, [onBackend])
 
   if (support === 'none') {
     return (

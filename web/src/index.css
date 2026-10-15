@@ -33,6 +33,7 @@ body,
 .top-bar {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 8px;
   padding: 6px 12px;
   background: var(--panel);
@@ -68,4 +69,140 @@ body,
   color: var(--muted);
   font-size: 16px;
   text-align: center;
+}
+
+.top-bar button,
+.dialog button {
+  font: inherit;
+  color: var(--text);
+  background: #2e323b;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 3px 10px;
+  cursor: pointer;
+}
+
+.top-bar button:hover,
+.dialog button:hover {
+  background: #383d48;
+}
+
+.scene-name,
+.dialog input,
+.dialog select {
+  font: inherit;
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 3px 8px;
+}
+
+.scene-name {
+  width: 220px;
+}
+
+.dirty-marker {
+  color: var(--accent);
+  font-size: 20px;
+  line-height: 1;
+  margin-right: 4px;
+}
+
+.spacer {
+  flex: 1;
+}
+
+.message {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 4px 2px 10px;
+  border-radius: 4px;
+  background: #2e323b;
+}
+
+.message-error {
+  color: var(--error);
+}
+
+.top-bar .message-close {
+  border: none;
+  background: none;
+  padding: 0 6px;
+  color: inherit;
+}
+
+.badge {
+  padding: 2px 8px;
+  border-radius: 10px;
+  border: 1px solid #b08a3a;
+  color: #e3bd6b;
+  font-size: 12px;
+}
+
+.dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: rgb(0 0 0 / 0.45);
+  z-index: 10;
+}
+
+.dialog {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 320px;
+  max-width: min(480px, calc(100vw - 32px));
+  padding: 16px 20px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.dialog h2 {
+  margin: 0;
+  font-size: 16px;
+}
+
+.dialog label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  color: var(--muted);
+}
+
+.dialog-buttons {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.dialog .primary {
+  background: #4d6e36;
+  border-color: #5f8743;
+}
+
+.muted {
+  color: var(--muted);
+  margin: 0;
+}
+
+.scene-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 50vh;
+  overflow: auto;
+}
+
+.scene-list button {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  width: 100%;
+  margin-bottom: 6px;
+  text-align: left;
 }
