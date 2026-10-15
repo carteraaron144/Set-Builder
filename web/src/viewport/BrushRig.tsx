@@ -33,7 +33,10 @@ export function BrushRig({ terrain }: { terrain: TerrainEditor }) {
       pick,
       begin: (at) => {
         const s = useEditorStore.getState()
-        const tool: StrokeTool = s.tool === 'paint' ? { tool: 'paint', biome: s.biome } : { tool: 'terrain', mode: s.terrainMode }
+        const tool: StrokeTool =
+          s.tool === 'paint'
+            ? { tool: 'paint', biome: s.biome }
+            : { tool: 'terrain', mode: s.terrainMode, terraceStep: s.terraceStep }
         terrain.beginStroke(tool, s.brush, at)
       },
       dab: (at, dt, altKey) => terrain.dab(at, dt, altKey !== useEditorStore.getState().invertToggle),

@@ -14,7 +14,7 @@ import {
 } from './layers'
 import { valueNoise2 } from './noise'
 
-export type TerrainMode = 'raise' | 'lower' | 'smooth' | 'flatten' | 'noise'
+export type TerrainMode = 'raise' | 'lower' | 'smooth' | 'flatten' | 'noise' | 'terrace'
 
 /** radius in metres; strength and falloff 0..1. */
 export interface BrushSettings {
@@ -73,7 +73,7 @@ export function sculpt(
   mode: TerrainMode,
   b: BrushSettings,
   dab: Dab,
-  ctx: { flattenTo: number; seed: number },
+  ctx: { flattenTo: number; seed: number; terraceStep?: number },
 ): Rect | null {
   const rect = dabRect(h.size, h.resolution, HEIGHT_SPACING, dab, b.radius)
   if (!rect) return null
@@ -117,6 +117,12 @@ export function sculpt(
               n++
             }
           v += (sum / n - v) * k
+          break
+        }
+        case 'terrace': {
+          // Absolute multiples of the step from y = 0, so neighbouring strokes line up. Invert has no effect.
+          const step = ctx.terraceStep ?? 1.5
+          v += (Math.round(v / step) * step - v) * k
           break
         }
         case 'noise':

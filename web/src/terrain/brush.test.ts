@@ -169,3 +169,39 @@ describe('paint', () => {
     expectSameValues(biomes.data, before)
   })
 })
+
+describe('terrace', () => {
+  function ramp() {
+    const { heights } = createFlatLayers(64)
+    for (let j = 0; j < 129; j++) for (let i = 0; i < 129; i++) heights.data[j * 129 + i] = i * 0.1
+    return heights
+  }
+  const inBrush = (i: number, j: number, r: number) => Math.hypot(i - 64, j - 64) * 0.5 < r
+
+  it('snaps heights under the brush to multiples of the step, with one-sample risers', () => {
+    const h = ramp()
+    sculpt(h, 'terrace', hard(6), { x: 0, z: 0, dt: 10, invert: false }, { flattenTo: 0, seed: 1, terraceStep: 1.5 })
+    for (let j = 52; j <= 76; j++)
+      for (let i = 52; i <= 76; i++) {
+        if (!inBrush(i, j, 6)) continue
+        const v = at(h, i, j)
+        expect(Math.abs(v / 1.5 - Math.round(v / 1.5))).toBeLessThan(1e-5)
+        if (inBrush(i + 1, j, 6)) expect([0, 1.5]).toContainEqual(Number((at(h, i + 1, j) - v).toFixed(5)))
+      }
+  })
+
+  it('ignores invert', () => {
+    const a = ramp()
+    const b = ramp()
+    sculpt(a, 'terrace', hard(6), { x: 0, z: 0, dt: 10, invert: false }, { flattenTo: 0, seed: 1, terraceStep: 1.5 })
+    sculpt(b, 'terrace', hard(6), { x: 0, z: 0, dt: 10, invert: true }, { flattenTo: 0, seed: 1, terraceStep: 1.5 })
+    expectSameValues(a.data, b.data)
+  })
+
+  it('uses the step it is given', () => {
+    const h = ramp()
+    sculpt(h, 'terrace', hard(6), { x: 0, z: 0, dt: 10, invert: false }, { flattenTo: 0, seed: 1, terraceStep: 0.5 })
+    const v = at(h, 66, 64)
+    expect(Math.abs(v / 0.5 - Math.round(v / 0.5))).toBeLessThan(1e-5)
+  })
+})

@@ -5,5 +5,8 @@
     "rocky": "#9a9182",
     "swamp": "#5d6b45"
   },
-  "rock": { "color": "#8a8178", "slopeStartDeg": 35, "slopeFullDeg": 50 }
+  "slopeBands": {
+    "earth": { "color": "#8a6a48", "startDeg": 30, "fullDeg": 35 },
+    "rock": { "color": "#8a8178", "startDeg": 60, "fullDeg": 65 }
+  }
 }

@@ -148,3 +148,35 @@ describe('TerrainEditor paint convergence', () => {
     expect(ed.layers.biomes.data[at7m + 1]).toBeGreaterThan(before[at7m + 1])
   })
 })
+
+describe('TerrainEditor terrace', () => {
+  it('terraces at the scene corner, undoes exactly and rebuilds the corner chunk', () => {
+    const layers = createFlatLayers(64)
+    for (let i = 0; i < layers.heights.data.length; i++) layers.heights.data[i] = (i % 129) * 0.07
+    const { ed } = editor(64, layers)
+    const before = ed.layers.heights.data.slice()
+    ed.takeDirtyChunks()
+    ed.beginStroke({ tool: 'terrain', mode: 'terrace', terraceStep: 1.5 }, { radius: 8, strength: 1, falloff: 0 }, { x: -32, z: -32 })
+    ed.dab({ x: -32, z: -32 }, 10, false)
+    ed.endStroke()
+    expect(same(ed.layers.heights.data, before)).toBe(false)
+    expect(ed.layers.heights.data[16 * 129 + 0] % 1.5).toBeCloseTo(0)
+    expect(ed.takeDirtyChunks()).toContain(0)
+    ed.undo()
+    expect(same(ed.layers.heights.data, before)).toBe(true)
+  })
+
+  it('keeps terraced heights through a save and reopen', async () => {
+    const { writeSceneFile, readSceneFile } = await import('../scene/sceneFile')
+    const { createScene } = await import('../scene/scene')
+    const { ed } = editor(64)
+    ed.beginStroke({ tool: 'terrain', mode: 'raise' }, { radius: 12, strength: 1, falloff: 0.5 }, { x: 0, z: 0 })
+    ed.dab({ x: 0, z: 0 }, 1, false)
+    ed.endStroke()
+    ed.beginStroke({ tool: 'terrain', mode: 'terrace', terraceStep: 1.5 }, { radius: 12, strength: 1, falloff: 0 }, { x: 0, z: 0 })
+    ed.dab({ x: 0, z: 0 }, 10, false)
+    ed.endStroke()
+    const read = readSceneFile(writeSceneFile(createScene({ size: 64 }), ed.layers))
+    expect(same(read.layers.heights.data, ed.layers.heights.data)).toBe(true)
+  })
+})

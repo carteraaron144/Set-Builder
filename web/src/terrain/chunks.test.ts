@@ -85,15 +85,34 @@ describe('chunk geometry', () => {
     expectRGB(colour(g.colors, 8, 12), [0, 1, 2].map((c) => (128 * m[c] + 127 * f[c]) / 255) as RGB)
   })
 
-  it('colours steep faces as rock and gentle ones as biome', () => {
+  it('shades by slope: biome, then earth, then rock', () => {
     const ramp = (deg: number) => {
       const l = createFlatLayers(64)
       const t = Math.tan((deg * Math.PI) / 180)
       for (let j = 0; j < 129; j++) for (let i = 0; i < 129; i++) l.heights.data[j * 129 + i] = (i - 64) * 0.5 * t
-      return buildChunkGeometry(l, 0, DEFAULT_PALETTE)
+      return colour(buildChunkGeometry(l, 0, DEFAULT_PALETTE).colors, 32, 32)
     }
-    expectRGB(colour(ramp(60).colors, 32, 32), DEFAULT_PALETTE.rock)
-    expectRGB(colour(ramp(20).colors, 32, 32), DEFAULT_PALETTE.biomes[0])
+    const { biomes, earth, rock } = DEFAULT_PALETTE
+    const near = (a: number[], b: RGB) => a.every((v, i) => Math.abs(v - b[i]) < 1e-6)
+    expectRGB(ramp(20), biomes[0])
+    expect(near(ramp(33), biomes[0]) || near(ramp(33), earth.color)).toBe(false)
+    expectRGB(ramp(45), earth.color)
+    expect(near(ramp(62), earth.color) || near(ramp(62), rock.color)).toBe(false)
+    expectRGB(ramp(70), rock.color)
+  })
+
+  it('keeps a 1.5 m terrace riser earthen and a 10 m wall rocky', () => {
+    const step = (h: number) => {
+      const l = createFlatLayers(64)
+      for (let j = 0; j < 129; j++) for (let i = 0; i < 129; i++) l.heights.data[j * 129 + i] = i < 32 ? 0 : h
+      return buildChunkGeometry(l, 0, DEFAULT_PALETTE).colors
+    }
+    const riser = step(1.5)
+    expectRGB(colour(riser, 31, 10), DEFAULT_PALETTE.earth.color)
+    expectRGB(colour(riser, 32, 10), DEFAULT_PALETTE.earth.color)
+    const wall = step(10)
+    expectRGB(colour(wall, 31, 10), DEFAULT_PALETTE.rock.color)
+    expectRGB(colour(wall, 32, 10), DEFAULT_PALETTE.rock.color)
   })
 
   it('updates in place to match a fresh build', () => {

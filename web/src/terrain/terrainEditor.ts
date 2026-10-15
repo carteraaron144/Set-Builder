@@ -4,7 +4,7 @@ import { chunksForBiomeRect, chunksForHeightRect } from './chunks'
 import { StrokeHistory, type LayerPatch } from './history'
 import { cropRect, heightAt, pasteRect, type BiomeId, type Rect, type TerrainLayers } from './layers'
 
-export type StrokeTool = { tool: 'terrain'; mode: TerrainMode } | { tool: 'paint'; biome: BiomeId }
+export type StrokeTool = { tool: 'terrain'; mode: TerrainMode; terraceStep?: number } | { tool: 'paint'; biome: BiomeId }
 export type TerrainChange = 'stroke' | 'undo' | 'redo'
 
 interface Stroke {
@@ -73,7 +73,11 @@ export class TerrainEditor {
     const dab = { x: at.x, z: at.z, dt, invert }
     const rect =
       s.tool.tool === 'terrain'
-        ? sculpt(this.layers.heights, s.tool.mode, s.brush, dab, { flattenTo: s.flattenTo, seed: this.seed })
+        ? sculpt(this.layers.heights, s.tool.mode, s.brush, dab, {
+            flattenTo: s.flattenTo,
+            seed: this.seed,
+            terraceStep: s.tool.terraceStep,
+          })
         : paint(this.layers.biomes, s.tool.biome, s.brush, dab, s.weights ?? undefined)
     if (!rect) return
     s.rect = union(s.rect, rect)

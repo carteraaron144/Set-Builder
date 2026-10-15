@@ -37,8 +37,9 @@ Add `?renderer=webgl2` to the URL to force the WebGL2 backend (to check the fall
 | Undo / redo | Toolbar buttons | Ctrl/Cmd+Z, Ctrl/Cmd+Shift+Z (or Ctrl+Y) |
 | Save in this browser | Save | Ctrl/Cmd+S |
 
-Terrain modes are raise, lower, smooth, flatten (to the height where the stroke started) and noise. Paint brushes the
-meadow, forest, rocky and swamp biomes; steep slopes show rock automatically.
+Terrain modes are raise, lower, smooth, flatten (to the height where the stroke started), noise and terrace (snaps
+heights to multiples of the Step height, 0.5–5 m, for stepped earthen mounds). Paint brushes the
+meadow, forest, rocky and swamp biomes; slopes shade to earth from 30° and to rock from 60° automatically.
 
 ## Test
 

@@ -105,7 +105,9 @@ export function updateChunkGeometry(l: TerrainLayers, chunk: number, p: TerrainP
       const ju = Math.min(res - 1, j + 1)
       const dx = (h[j * res + ir] - h[j * res + il]) / ((ir - il) * HEIGHT_SPACING)
       const dz = (h[ju * res + i] - h[jd * res + i]) / ((ju - jd) * HEIGHT_SPACING)
-      const rock = smoothstep(p.slopeStart, p.slopeFull, Math.atan(Math.hypot(dx, dz)))
+      const slope = Math.atan(Math.hypot(dx, dz))
+      const earth = smoothstep(p.earth.start, p.earth.full, slope)
+      const rock = smoothstep(p.rock.start, p.rock.full, slope)
 
       const bi0 = Math.min(bRes - 1, i >> 1)
       const bi1 = Math.min(bRes - 1, bi0 + 1)
@@ -124,7 +126,8 @@ export function updateChunkGeometry(l: TerrainLayers, chunk: number, p: TerrainP
       const w3 = (b[o00 + 3] * c00 + b[o10 + 3] * c10 + b[o01 + 3] * c01 + b[o11 + 3] * c11) / 255
       for (let c = 0; c < 3; c++) {
         const biome = w0 * pb[0][c] + w1 * pb[1][c] + w2 * pb[2][c] + w3 * pb[3][c]
-        g.colors[k + c] = biome + (p.rock[c] - biome) * rock
+        const ground = biome + (p.earth.color[c] - biome) * earth
+        g.colors[k + c] = ground + (p.rock.color[c] - ground) * rock
       }
     }
   }

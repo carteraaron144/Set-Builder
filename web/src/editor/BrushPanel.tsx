@@ -10,6 +10,7 @@ const MODES: { id: TerrainMode; label: string }[] = [
   { id: 'smooth', label: 'Smooth' },
   { id: 'flatten', label: 'Flatten' },
   { id: 'noise', label: 'Noise' },
+  { id: 'terrace', label: 'Terrace' },
 ]
 
 const capitalise = (s: string) => s[0].toUpperCase() + s.slice(1)
@@ -22,7 +23,8 @@ export function BrushPanel() {
   const biome = useEditorStore((s) => s.biome)
   const brush = useEditorStore((s) => s.brush)
   const invert = useEditorStore((s) => s.invertToggle)
-  const { setTerrainMode, setBiome, setBrush, setInvertToggle } = useEditorStore.getState()
+  const terraceStep = useEditorStore((s) => s.terraceStep)
+  const { setTerrainMode, setBiome, setBrush, setInvertToggle, setTerraceStep } = useEditorStore.getState()
   if (!tool) return null
 
   return (
@@ -46,6 +48,21 @@ export function BrushPanel() {
             </label>
           ))}
         </div>
+      )}
+      {tool === 'terrain' && terrainMode === 'terrace' && (
+        <label className="slider">
+          <span>Step</span>
+          <input
+            type="range"
+            aria-label="Step"
+            min={0.5}
+            max={5}
+            step={0.5}
+            value={terraceStep}
+            onChange={(e) => setTerraceStep(Number(e.target.value))}
+          />
+          <output>{terraceStep} m</output>
+        </label>
       )}
       <label className="slider">
         <span>Size</span>

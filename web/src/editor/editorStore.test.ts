@@ -67,4 +67,13 @@ describe('editor store terrain state', () => {
     s().resizeBrush(1.25)
     expect(s().brush.radius).toBeCloseTo(12.5)
   })
+
+  it('holds the terrace step, clamped to 0.5–5 m', () => {
+    const store = createEditorStore()
+    expect(store.getState().terraceStep).toBe(1.5)
+    store.getState().setTerraceStep(10)
+    expect(store.getState().terraceStep).toBe(5)
+    store.getState().setTerraceStep(0.1)
+    expect(store.getState().terraceStep).toBe(0.5)
+  })
 })

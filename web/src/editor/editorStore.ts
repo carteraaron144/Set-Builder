@@ -31,6 +31,8 @@ export interface EditorState {
   biome: BiomeId
   brush: BrushSettings
   invertToggle: boolean
+  /** Terrace step height in metres (0.5–5). */
+  terraceStep: number
   canUndo: boolean
   canRedo: boolean
   /** Shows another scene (flat layers unless given); clears dirty and history. */
@@ -46,6 +48,7 @@ export interface EditorState {
   setBrush(p: Partial<BrushSettings>): void
   resizeBrush(factor: number): void
   setInvertToggle(v: boolean): void
+  setTerraceStep(m: number): void
   undo(): void
   redo(): void
 }
@@ -76,6 +79,7 @@ const initializer =
       biome: 'forest',
       brush: { ...BRUSH_DEFAULTS },
       invertToggle: false,
+      terraceStep: 1.5,
       canUndo: false,
       canRedo: false,
       replaceScene: (next, layers) =>
@@ -110,6 +114,7 @@ const initializer =
       },
       resizeBrush: (factor) => get().setBrush({ radius: get().brush.radius * factor }),
       setInvertToggle: (invertToggle) => set({ invertToggle }),
+      setTerraceStep: (m) => set({ terraceStep: clamp(m, 0.5, 5) }),
       undo: () => {
         get().terrain.undo()
       },
