@@ -3,7 +3,7 @@ import { strToU8, zipSync } from 'fflate'
 import { describe, expect, it, vi } from 'vitest'
 import { openSceneStore, StorageUnavailableError, type SceneStore } from '../persistence/sceneStore'
 import { createScene, type Scene } from '../scene/scene'
-import { readSceneFile, writeSceneFile } from '../scene/sceneFile'
+import { readSceneFile, SceneFileError, writeSceneFile } from '../scene/sceneFile'
 import { createFlatLayers } from '../terrain/layers'
 import { createEditorStore } from './editorStore'
 import {
@@ -198,5 +198,112 @@ describe('loadInitialScene', () => {
       expect(store.getState().scene).toBe(before)
       expect(store.getState().message).toBeNull()
     }
+  })
+})
+
+describe('terrain layers in scene actions', () => {
+  function sculpted(store: ReturnType<typeof createEditorStore>) {
+    const { terrain } = store.getState()
+    terrain.beginStroke({ tool: 'terrain', mode: 'raise' }, { radius: 6, strength: 1, falloff: 0.5 }, { x: 3, z: 3 })
+    terrain.dab({ x: 3, z: 3 }, 0.1, false)
+    terrain.endStroke()
+    return terrain.layers.heights.data.slice()
+  }
+  const same = (a: ArrayLike<number>, b: ArrayLike<number>) => a.length === b.length && Array.prototype.every.call(a, (v, i) => v === b[i])
+
+  it('saves layers and opens them again', async () => {
+    const { store, deps } = setup()
+    const heights = sculpted(store)
+    await saveCurrent(deps)
+    const fresh = createEditorStore()
+    await openScene({ ...deps, store: fresh }, store.getState().scene.id)
+    expect(same(fresh.getState().terrain.layers.heights.data, heights)).toBe(true)
+  })
+
+  it('downloads the current layers', () => {
+    const { store, deps, download } = setup()
+    const heights = sculpted(store)
+    downloadCurrent(deps)
+    expect(same(readSceneFile(download.mock.calls[0][1]).layers.heights.data, heights)).toBe(true)
+  })
+
+  it('starts a new scene flat with no history', () => {
+    const { store, deps } = setup()
+    sculpted(store)
+    newScene(deps, 'Fresh', 64)
+    expect(store.getState().terrain.layers.heights.data.every((v) => v === 0)).toBe(true)
+    expect(store.getState().canUndo).toBe(false)
+  })
+
+  it('restores the newest scene with its layers at startup', async () => {
+    const { store, deps } = setup()
+    const heights = sculpted(store)
+    await saveCurrent(deps)
+    const fresh = createEditorStore()
+    await loadInitialScene({ ...deps, store: fresh })
+    expect(same(fresh.getState().terrain.layers.heights.data, heights)).toBe(true)
+  })
+
+  it('opens an uploaded v1 file as flat terrain', async () => {
+    const { store, deps } = setup()
+    sculpted(store)
+    const { generatorVersion: _g, ...v1 } = { ...createScene({ size: 64, name: 'Old' }), formatVersion: 1 }
+    await uploadSceneFile(deps, fileOf(zipSync({ 'scene.json': strToU8(JSON.stringify(v1)) })))
+    expect(store.getState().scene.name).toBe('Old')
+    expect(store.getState().terrain.layers.heights.data.every((v) => v === 0)).toBe(true)
+  })
+
+  it('rejects an uploaded file with damaged layers and keeps the scene', async () => {
+    const { store, deps } = setup()
+    const heights = sculpted(store)
+    const before = store.getState().scene
+    const v2 = createScene({ size: 64 })
+    const damaged = zipSync({ 'scene.json': strToU8(JSON.stringify(v2)), 'heightmap.f32': new Uint8Array(8), 'biomes.rgba8': new Uint8Array(8) })
+    await uploadSceneFile(deps, fileOf(damaged))
+    expect(store.getState().message).toEqual({ kind: 'error', text: MESSAGES.damaged })
+    expect(MESSAGES.damaged).toBe('That scene file is damaged: its terrain data is missing or the wrong size.')
+    expect(store.getState().scene).toBe(before)
+    expect(same(store.getState().terrain.layers.heights.data, heights)).toBe(true)
+  })
+
+  it('reports a saved scene whose layers are damaged', async () => {
+    const { store, deps } = setup()
+    deps.sceneStore = async () => ({
+      save: async () => {},
+      load: () => Promise.reject(new SceneFileError('invalid-layers')),
+      list: async () => [],
+      remove: async () => {},
+    })
+    const before = store.getState().scene
+    await openScene(deps, 'x')
+    expect(store.getState().message).toEqual({ kind: 'error', text: MESSAGES.damagedSaved })
+    expect(MESSAGES.damagedSaved).toBe("That saved scene is damaged and can't be opened.")
+    expect(store.getState().scene).toBe(before)
+  })
+
+  it('saves the layers as they were when Save started, and a stroke during the write stays unsaved', async () => {
+    const { store, deps } = setup()
+    let release: () => void = () => {}
+    let stored: Float32Array | undefined
+    deps.sceneStore = async () => ({
+      save: (_scene, layers) =>
+        new Promise<void>((resolve) => {
+          stored = layers.heights.data
+          release = resolve
+        }),
+      load: async () => undefined,
+      list: async () => [],
+      remove: async () => {},
+    })
+    const before = store.getState().terrain.layers.heights.data.slice()
+    const saving = saveCurrent(deps)
+    await Promise.resolve()
+    await Promise.resolve()
+    sculpted(store)
+    release()
+    await saving
+    expect(same(stored!, before)).toBe(true)
+    expect(store.getState().dirty).toBe(true)
+    expect(store.getState().message).toEqual({ kind: 'info', text: 'Saved' })
   })
 })
