@@ -1,0 +1,10 @@
+node_modules/
+dist/
+build/
+.gradle/
+.idea/
+.DS_Store
+.superpowers/
+*.iml
+.kotlin/
+server/src/main/resources/static/
