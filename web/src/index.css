@@ -55,3 +55,17 @@ body,
   position: absolute;
   inset: 0;
 }
+
+.viewport canvas {
+  display: block;
+  touch-action: none;
+}
+
+.viewport-unsupported {
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  color: var(--muted);
+  font-size: 16px;
+  text-align: center;
+}
