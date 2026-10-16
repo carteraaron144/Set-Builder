@@ -201,4 +201,17 @@ describe('TerrainEditor with caves', () => {
     expect(ignoring!.x).toBeLessThan(-51)
     expect(withCaves!.x).toBeGreaterThan(-45)
   })
+
+  it('meshes the cave alone for its glow, only in chunks it reaches', () => {
+    const g = new Ground(hill(), withCave())
+    const glow = g.caveGlowGeometry(0)
+    expect(glow).not.toBeNull()
+    expect(glow!.indices.length).toBeGreaterThan(0)
+    // Every vertex sits on the cave's surface (distance 0, within the mesh's tetrahedra interpolation error).
+    for (let v = 0; v < glow!.positions.length; v += 3) {
+      expect(Math.abs(g.caveDistance(glow!.positions[v], glow!.positions[v + 1], glow!.positions[v + 2]))).toBeLessThan(0.3)
+    }
+    expect(g.caveGlowGeometry(1)).toBeNull()
+    expect(new Ground(hill(), withCave([])).caveGlowGeometry(0)).toBeNull()
+  })
 })

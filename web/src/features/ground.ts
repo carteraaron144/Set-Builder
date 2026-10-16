@@ -2,6 +2,7 @@ import { buildChunkGeometry, CHUNK_VERTS, chunkCount, type ChunkGeometry } from 
 import { BIOME_SPACING, clipRect, HEIGHT_SPACING, heightAt, type Rect, type TerrainLayers } from '../terrain/layers'
 import { DEFAULT_PALETTE, type TerrainPalette } from '../terrain/palette'
 import { raycastTerrain, type Vec3 } from '../terrain/pick'
+import { meshSdfChunk } from '../terrain/sdfChunk'
 import { buildCaveChunk } from './caveChunk'
 import { profileCave, smoothMin, type CaveProfile } from './caves'
 import { carveRect, exclusionRect, profileSpline, type SplineProfile, type SurfaceMap } from './carve'
@@ -169,6 +170,24 @@ export class Ground {
     const caves = ignoreCaves ? [] : this.cavesOf(chunk)
     if (caves.length === 0) return buildChunkGeometry(this.layers, chunk, palette, this.surface)
     return buildCaveChunk(this.layers, this.surface, caves, chunk, palette)
+  }
+
+  /** The caves alone, meshed inside chunk `chunk` (for a see-through glow); null if no cave reaches it. */
+  caveGlowGeometry(chunk: number): { positions: Float32Array; indices: Uint32Array } | null {
+    const caves = this.cavesOf(chunk)
+    if (caves.length === 0) return null
+    const { size } = this.layers.heights
+    const half = size / 2
+    const y0 = Math.min(...caves.map((c) => c.bounds.y0))
+    const y1 = Math.max(...caves.map((c) => c.bounds.y1))
+    const inside = (i: number, j: number, y: number) => {
+      let d = Infinity
+      for (const c of caves) d = Math.min(d, c.sdf(-half + i * HEIGHT_SPACING, y, -half + j * HEIGHT_SPACING))
+      // Capped so far-off samples don't skew the interpolation on edges that cross the surface.
+      return -Math.min(d, 50)
+    }
+    const { positions, indices } = meshSdfChunk(size, chunk, inside, y0 - 1, y1 + 1)
+    return indices.length > 0 ? { positions, indices } : null
   }
 
   private cavesOf(chunk: number): CaveProfile[] {
