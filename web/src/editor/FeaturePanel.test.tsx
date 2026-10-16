@@ -123,3 +123,73 @@ describe('FeaturePanel for ponds', () => {
     expect(state().selection).toBeNull()
   })
 })
+
+describe('Cave panel', () => {
+  const tunnel = {
+    id: 'c',
+    radius: 2,
+    points: [
+      { x: -10, y: 2, z: 0, chamber: 0 },
+      { x: 10, y: 0, z: 0, chamber: 0 },
+    ],
+  }
+  const select = (point: number | null) =>
+    act(() => {
+      state().terrain.commitFeatures({ splines: [], ponds: [], caves: [tunnel] })
+      state().setTool('cave')
+      state().setSelection({ kind: 'cave', id: 'c', point })
+    })
+  const cave = () => state().terrain.features.caves[0]
+
+  it('shows only the hint with nothing selected', () => {
+    act(() => state().setTool('cave'))
+    render(<FeaturePanel />)
+    expect(screen.getByRole('region', { name: 'Caves' })).toBeInTheDocument()
+    expect(screen.queryByRole('spinbutton')).toBeNull()
+  })
+
+  it('edits the tunnel radius, clamped, as one undo entry', () => {
+    select(null)
+    render(<FeaturePanel />)
+    expect(screen.queryByRole('spinbutton', { name: 'Height' })).toBeNull()
+    const radius = screen.getByRole('spinbutton', { name: 'Tunnel radius' })
+    act(() => {
+      fireEvent.change(radius, { target: { value: '9' } })
+    })
+    expect(cave().radius).toBe(4)
+    expect(radius).toHaveValue(4)
+    act(() => state().undo())
+    expect(cave().radius).toBe(2)
+  })
+
+  it("edits the selected point's height and chamber, each as one undo entry", async () => {
+    select(1)
+    render(<FeaturePanel />)
+    act(() => {
+      fireEvent.change(screen.getByRole('spinbutton', { name: 'Height' }), { target: { value: '-3' } })
+    })
+    expect(cave().points[1].y).toBe(-3)
+    expect(cave().points[0].y).toBe(2)
+    expect(screen.queryByRole('spinbutton', { name: 'Chamber radius' })).toBeNull()
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Chamber' }))
+    expect(cave().points[1].chamber).toBe(6)
+    act(() => {
+      fireEvent.change(screen.getByRole('spinbutton', { name: 'Chamber radius' }), { target: { value: '10' } })
+    })
+    expect(cave().points[1].chamber).toBe(10)
+    act(() => state().undo())
+    expect(cave().points[1].chamber).toBe(6)
+    act(() => state().undo())
+    expect(cave().points[1].chamber).toBe(0)
+    act(() => state().undo())
+    expect(cave().points[1].y).toBe(0)
+  })
+
+  it('deletes the selected cave', async () => {
+    select(0)
+    render(<FeaturePanel />)
+    await userEvent.click(screen.getByRole('button', { name: 'Delete' }))
+    expect(state().terrain.features.caves).toEqual([])
+    expect(state().selection).toBeNull()
+  })
+})

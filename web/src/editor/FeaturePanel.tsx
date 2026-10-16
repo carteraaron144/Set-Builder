@@ -1,5 +1,7 @@
 import { useEffect, useRef } from 'react'
-import { clampWidth, widthRange, type PathStyle, type Pond, type Spline } from '../features/features'
+import { clampWidth, FEATURES, widthRange, type PathStyle, type Pond, type Spline } from '../features/features'
+import { MAX_HEIGHT, MIN_HEIGHT } from '../terrain/layers'
+import { editCave, editCavePoint } from '../tools/caveInput'
 import { levelRange } from '../tools/pondInput'
 import { useEditorStore } from './editorStore'
 
@@ -9,11 +11,13 @@ const STYLES: { id: PathStyle; label: string }[] = [
 ]
 
 const POND_HINT = 'Click to make a pond and drag up or down to set its level. Click a pond to select it.'
+const CAVE_HINT =
+  'Click the ground for the entrance, then click to add points at the same depth; double-click or Enter to finish. Click a point to select it and drag it; its height and chamber are below.'
 const HINT = 'Click to add points; double-click or Enter to finish. Click a spline to select it, drag its points, Alt-click to add one.'
 
 /**
- * Context panel for the Path, River and Water tools: style for new paths, the selected spline's width and style,
- * and the selected pond's level.
+ * Context panel for the Path, River, Water and Cave tools: style for new paths, the selected spline's width and style,
+ * the selected pond's level, and the selected cave's radius and point.
  */
 export function FeaturePanel() {
   const tool = useEditorStore((s) => s.tool)
@@ -22,6 +26,7 @@ export function FeaturePanel() {
   const terrain = useEditorStore((s) => s.terrain)
   useEditorStore((s) => s.editVersion)
   if (tool === 'water') return <PondPanel />
+  if (tool === 'cave') return <CavePanel />
   if (tool !== 'path' && tool !== 'river') return null
 
   const spline = selection?.kind === 'spline' ? terrain.features.splines.find((s) => s.id === selection.id) : undefined
@@ -161,6 +166,105 @@ function LevelSlider(props: {
       <span>Level</span>
       <input ref={ref} type="range" aria-label="Level" min={range[0]} max={range[1]} step={0.05} defaultValue={pond.level} />
       <output>{pond.level.toFixed(2)} m</output>
+    </label>
+  )
+}
+
+function CavePanel() {
+  const selection = useEditorStore((s) => s.selection)
+  const terrain = useEditorStore((s) => s.terrain)
+  useEditorStore((s) => s.editVersion)
+  const sel = selection?.kind === 'cave' ? selection : null
+  const cave = sel ? terrain.features.caves.find((c) => c.id === sel.id) : undefined
+  const index = sel?.point ?? null
+  const point = cave && index !== null ? cave.points[index] : undefined
+  const { radius, chamber } = FEATURES.cave
+
+  return (
+    <section className="brush-panel" aria-label="Caves">
+      {cave && (
+        <>
+          <NumberField
+            label="Tunnel radius"
+            value={cave.radius}
+            range={[radius.min, radius.max]}
+            onCommit={(r) => terrain.commitFeatures(editCave(terrain.features, cave.id, { radius: r }))}
+          />
+          {point && index !== null && (
+            <>
+              <NumberField
+                label="Height"
+                value={point.y}
+                range={[MIN_HEIGHT, MAX_HEIGHT]}
+                onCommit={(y) => terrain.commitFeatures(editCavePoint(terrain.features, cave.id, index, { y }))}
+              />
+              <label className="choice">
+                <input
+                  type="checkbox"
+                  checked={point.chamber > 0}
+                  onChange={(e) =>
+                    terrain.commitFeatures(
+                      editCavePoint(terrain.features, cave.id, index, { chamber: e.target.checked ? chamber.default : 0 }),
+                    )
+                  }
+                />
+                Chamber
+              </label>
+              {point.chamber > 0 && (
+                <NumberField
+                  label="Chamber radius"
+                  value={point.chamber}
+                  range={[chamber.min, chamber.max]}
+                  onCommit={(c) => terrain.commitFeatures(editCavePoint(terrain.features, cave.id, index, { chamber: c }))}
+                />
+              )}
+            </>
+          )}
+          <button
+            type="button"
+            onClick={() => {
+              terrain.commitFeatures({ ...terrain.features, caves: terrain.features.caves.filter((c) => c.id !== cave.id) })
+              useEditorStore.getState().setSelection(null)
+            }}
+          >
+            Delete
+          </button>
+        </>
+      )}
+      <p className="panel-hint">{CAVE_HINT}</p>
+    </section>
+  )
+}
+
+/** A metres field clamped to `range` that commits on the native change (blur, Enter or a spinner step). */
+function NumberField(props: { label: string; value: number; range: [number, number]; onCommit(v: number): void }) {
+  const { label, value, range } = props
+  const ref = useRef<HTMLInputElement>(null)
+  const latest = useRef(props)
+  useEffect(() => {
+    latest.current = props
+  })
+  useEffect(() => {
+    if (ref.current) ref.current.value = String(value)
+  }, [value])
+  useEffect(() => {
+    const el = ref.current!
+    const onChange = () => {
+      const { value: old, range: [lo, hi], onCommit } = latest.current
+      const v = Number(el.value)
+      const next = Math.min(hi, Math.max(lo, Number.isFinite(v) && el.value !== '' ? v : old))
+      el.value = String(next)
+      if (next !== old) onCommit(next)
+    }
+    el.addEventListener('change', onChange)
+    return () => el.removeEventListener('change', onChange)
+  }, [])
+
+  return (
+    <label className="slider">
+      <span>{label}</span>
+      <input ref={ref} type="number" aria-label={label} min={range[0]} max={range[1]} step={0.5} defaultValue={value} />
+      <output>m</output>
     </label>
   )
 }

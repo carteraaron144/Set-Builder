@@ -7,6 +7,7 @@ import {
   InstancedMesh,
   Line,
   LineBasicMaterial,
+  LineSegments,
   Matrix4,
   MeshBasicMaterial,
   Raycaster,
@@ -14,11 +15,13 @@ import {
   Vector2,
 } from 'three'
 import { useEditorStore } from '../editor/editorStore'
-import type { SplinePoint } from '../features/features'
+import { sampleCave } from '../features/caves'
+import type { CavePoint, SplinePoint } from '../features/features'
 import { sampleSpline } from '../features/spline'
 import { heightAt } from '../terrain/layers'
 import type { Scene } from '../scene/scene'
 import type { TerrainEditor } from '../terrain/terrainEditor'
+import { CaveInput, type Ray } from '../tools/caveInput'
 import { PondInput } from '../tools/pondInput'
 import { SplineInput, type SplineResult } from '../tools/splineInput'
 
@@ -48,20 +51,32 @@ function createLine(): Line {
   return line
 }
 
+/** Every cave's centreline, drawn through the ground. */
+function createCaveLines(): LineSegments {
+  const lines = new LineSegments(new BufferGeometry(), new LineBasicMaterial({ color: '#ffb36b', depthTest: false, transparent: true }))
+  lines.renderOrder = 10
+  lines.frustumCulled = false
+  lines.visible = false
+  return lines
+}
+
 /**
- * Wires clicks on the carved ground to the Path, River and Water tools: drawing, selecting and dragging spline
- * points or pond levels, with handles drawn as spheres and the draft as a line.
+ * Wires clicks on the carved ground to the Path, River, Water and Cave tools: drawing, selecting and dragging
+ * spline or cave points or pond levels, with handles drawn as spheres and the draft as a line. Cave handles and
+ * centrelines sit at their own depth and draw through the ground.
  */
 export function FeatureRig({ terrain, scene }: { terrain: TerrainEditor; scene: Scene }) {
   const camera = useThree((s) => s.camera)
   const element = useThree((s) => s.gl.domElement) as HTMLCanvasElement
   const tool = useEditorStore((s) => s.tool)
-  const kind = tool === 'path' || tool === 'river' || tool === 'water' ? tool : null
+  const kind = tool === 'path' || tool === 'river' || tool === 'water' || tool === 'cave' ? tool : null
   const [handles] = useState(createHandles)
   const [line] = useState(createLine)
-  const inputRef = useRef<SplineInput | PondInput | null>(null)
+  const [caveLines] = useState(createCaveLines)
+  const inputRef = useRef<SplineInput | PondInput | CaveInput | null>(null)
   const hover = useRef<SplinePoint | null>(null)
   const pendingDrag = useRef<SplinePoint | null>(null)
+  const pendingRay = useRef<Ray | null>(null)
   const pendingY = useRef<number | null>(null)
   const changed = useRef(true)
 
@@ -71,8 +86,10 @@ export function FeatureRig({ terrain, scene }: { terrain: TerrainEditor; scene: 
       ;(handles.material as MeshBasicMaterial).dispose()
       line.geometry.dispose()
       ;(line.material as LineBasicMaterial).dispose()
+      caveLines.geometry.dispose()
+      ;(caveLines.material as LineBasicMaterial).dispose()
     },
-    [handles, line],
+    [handles, line, caveLines],
   )
 
   useEffect(() => {
@@ -80,7 +97,9 @@ export function FeatureRig({ terrain, scene }: { terrain: TerrainEditor; scene: 
     if (!kind) return
     const store = useEditorStore
     const input =
-      kind === 'water'
+      kind === 'cave'
+        ? new CaveInput(() => terrain.features, scene.size)
+        : kind === 'water'
         ? new PondInput(
             () => terrain.features,
             () => terrain.ground.layers.heights,
@@ -89,17 +108,23 @@ export function FeatureRig({ terrain, scene }: { terrain: TerrainEditor; scene: 
           )
         : new SplineInput(kind, () => terrain.features, scene.size, () => store.getState().pathStyle)
     const splines = input instanceof SplineInput ? input : null
+    const caves = input instanceof CaveInput ? input : null
     inputRef.current = input
     let dragging = false
 
     const raycaster = new Raycaster()
     const ndc = new Vector2()
-    const pick = (e: MouseEvent): SplinePoint | null => {
+    /** The pointer's ray, and where it meets the ground. */
+    const cast = (e: MouseEvent): { ray: Ray; hit: { x: number; y: number; z: number } | null } | null => {
       const r = element.getBoundingClientRect()
       if (r.width === 0 || r.height === 0) return null
       ndc.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1)
       raycaster.setFromCamera(ndc, camera)
-      const hit = terrain.ground.raycast(raycaster.ray.origin, raycaster.ray.direction)
+      const ray = { origin: raycaster.ray.origin.clone(), dir: raycaster.ray.direction.clone() }
+      return { ray, hit: terrain.ground.raycast(ray.origin, ray.dir) }
+    }
+    const pick = (e: MouseEvent): SplinePoint | null => {
+      const hit = cast(e)?.hit
       return hit ? { x: hit.x, z: hit.z } : null
     }
     const apply = (r: SplineResult | null) => {
@@ -109,25 +134,41 @@ export function FeatureRig({ terrain, scene }: { terrain: TerrainEditor; scene: 
       if (r.commit) terrain.commitFeatures(r.commit)
       if (r.message) store.getState().setMessage({ kind: 'info', text: r.message })
       const id = input.selectedId
-      const selKind = splines ? 'spline' : 'pond'
       const cur = store.getState().selection
+      if (caves) {
+        const point = caves.selectedPoint
+        if (cur?.kind !== 'cave' ? id !== null : cur.id !== id || cur.point !== point)
+          store.getState().setSelection(id ? { kind: 'cave', id, point } : null)
+        return r
+      }
+      const selKind = splines ? 'spline' : 'pond'
       if ((cur?.kind === selKind ? cur.id : null) !== id) store.getState().setSelection(id ? { kind: selKind, id } : null)
       return r
     }
     const flushDrag = () => {
       const p = pendingDrag.current
       const y = pendingY.current
+      const ray = pendingRay.current
       pendingDrag.current = null
       pendingY.current = null
+      pendingRay.current = null
       if (p && splines) apply(splines.pointerMove(p))
-      if (y !== null && !splines) apply((input as PondInput).pointerMove(y))
+      if (ray && caves) apply(caves.pointerMove(ray))
+      if (y !== null && input instanceof PondInput) apply(input.pointerMove(y))
     }
 
     const onPointerDown = (e: PointerEvent) => {
       if (e.button !== 0) return
-      const p = pick(e)
-      if (!p) return
-      const r = splines ? splines.pointerDown(p) : (input as PondInput).pointerDown(p, e.clientY)
+      let r: SplineResult | null
+      if (caves) {
+        const c = cast(e)
+        if (!c) return
+        r = caves.pointerDown(c.ray)
+      } else {
+        const p = pick(e)
+        if (!p) return
+        r = splines ? splines.pointerDown(p) : (input as PondInput).pointerDown(p, e.clientY)
+      }
       if (!apply(r) || r?.message) return
       dragging = true
       try {
@@ -139,15 +180,21 @@ export function FeatureRig({ terrain, scene }: { terrain: TerrainEditor; scene: 
     const onPointerMove = (e: PointerEvent) => {
       if (dragging) {
         if (splines) pendingDrag.current = pick(e) ?? pendingDrag.current
+        else if (caves) pendingRay.current = cast(e)?.ray ?? pendingRay.current
         else pendingY.current = e.clientY
         return
       }
-      if (e.target !== element || !splines) return
-      const p = pick(e)
-      hover.current = p
+      if (e.target !== element || input instanceof PondInput) return
       changed.current = true
-      if (p) splines.pointerMove(p)
-      element.style.cursor = splines.hoveredHandle !== null ? 'pointer' : 'crosshair'
+      if (caves) {
+        const c = cast(e)
+        hover.current = c?.hit ? { x: c.hit.x, z: c.hit.z } : null
+        if (c) caves.pointerMove(c.ray)
+      } else {
+        hover.current = pick(e)
+        if (hover.current) splines?.pointerMove(hover.current)
+      }
+      element.style.cursor = input.hoveredHandle !== null ? 'pointer' : 'crosshair'
     }
     /** Commits a drag in progress: on release, and before undo or a tool change so no preview is left over. */
     const endDrag = () => {
@@ -158,12 +205,22 @@ export function FeatureRig({ terrain, scene }: { terrain: TerrainEditor; scene: 
     }
     const onPointerUp = endDrag
     const onClick = (e: MouseEvent) => {
-      if (e.button !== 0 || !splines) return
-      const p = pick(e)
+      if (e.button !== 0) return
+      if (caves) {
+        const c = cast(e)
+        if (c) apply(caves.click(c.hit, c.ray))
+        return
+      }
+      const p = splines && pick(e)
       if (p) apply(splines.click(p, { alt: e.altKey }))
     }
     const onDoubleClick = (e: MouseEvent) => {
       e.preventDefault()
+      if (caves) {
+        const c = cast(e)
+        if (c) apply(caves.doubleClick(c.hit, c.ray))
+        return
+      }
       const p = pick(e)
       if (p && splines) apply(splines.doubleClick(p))
     }
@@ -185,8 +242,15 @@ export function FeatureRig({ terrain, scene }: { terrain: TerrainEditor; scene: 
 
     const unsubscribe = store.subscribe((s, prev) => {
       if (s.selection === prev.selection) return
-      const id = s.selection?.kind === (splines ? 'spline' : 'pond') ? s.selection!.id : null
-      if (id !== input.selectedId) input.select(id)
+      const sel = s.selection
+      if (caves) {
+        const id = sel?.kind === 'cave' ? sel.id : null
+        const point = sel?.kind === 'cave' ? sel.point : null
+        if (id !== caves.selectedId || point !== caves.selectedPoint) caves.select(id, point)
+      } else {
+        const id = sel?.kind === (splines ? 'spline' : 'pond') ? sel!.id : null
+        if (id !== input.selectedId) input.select(id)
+      }
       changed.current = true
     })
     store.getState().setFeatureKeys({
@@ -224,6 +288,12 @@ export function FeatureRig({ terrain, scene }: { terrain: TerrainEditor; scene: 
       if (r?.preview) terrain.previewFeatures(r.preview)
       changed.current = true
     }
+    if (input instanceof CaveInput && pendingRay.current) {
+      const r = input.pointerMove(pendingRay.current)
+      pendingRay.current = null
+      if (r?.preview) terrain.previewFeatures(r.preview)
+      changed.current = true
+    }
     if (input instanceof PondInput && pendingY.current !== null) {
       const r = input.pointerMove(pendingY.current)
       pendingY.current = null
@@ -237,9 +307,9 @@ export function FeatureRig({ terrain, scene }: { terrain: TerrainEditor; scene: 
 
     const m = new Matrix4()
     let n = 0
-    const put = (p: SplinePoint, c: Color) => {
+    const put = (p: SplinePoint | CavePoint, c: Color) => {
       if (n >= MAX_HANDLES) return
-      handles.setMatrixAt(n, m.makeTranslation(p.x, y(p), p.z))
+      handles.setMatrixAt(n, m.makeTranslation(p.x, 'y' in p ? p.y : y(p), p.z))
       handles.setColorAt(n, c)
       n++
     }
@@ -247,6 +317,34 @@ export function FeatureRig({ terrain, scene }: { terrain: TerrainEditor; scene: 
       handles.count = n
       handles.instanceMatrix.needsUpdate = true
       if (handles.instanceColor) handles.instanceColor.needsUpdate = true
+    }
+
+    caveLines.visible = false
+    // Caves: every point at its depth (the selected point and hovered handle highlighted) and every centreline.
+    if (input instanceof CaveInput) {
+      const segments: number[] = []
+      const strip = (pts: CavePoint[]) => {
+        if (pts.length < 2) return
+        const sm = sampleCave(pts, 1)
+        for (let k = 1; k < sm.xs.length; k++)
+          segments.push(sm.xs[k - 1], sm.ys[k - 1], sm.zs[k - 1], sm.xs[k], sm.ys[k], sm.zs[k])
+      }
+      for (const c of terrain.features.caves) {
+        const selected = c.id === input.selectedId
+        c.points.forEach((p, k) => put(p, selected && (k === input.selectedPoint || k === input.hoveredHandle) ? HOVERED : HANDLE))
+        strip(c.points)
+      }
+      const draft = input.draft ?? []
+      draft.forEach((p) => put(p, DRAFT))
+      const last = draft[draft.length - 1]
+      strip(last && hover.current ? [...draft, { ...hover.current, y: last.y, chamber: 0 }] : draft)
+      done()
+      line.visible = false
+      caveLines.visible = segments.length > 0
+      caveLines.geometry.dispose()
+      caveLines.geometry = new BufferGeometry()
+      caveLines.geometry.setAttribute('position', new BufferAttribute(Float32Array.from(segments), 3))
+      return
     }
 
     // Ponds: every seed, so empty ponds can be found; the selected one highlighted.
@@ -285,6 +383,7 @@ export function FeatureRig({ terrain, scene }: { terrain: TerrainEditor; scene: 
     <>
       <primitive object={handles} />
       <primitive object={line} />
+      <primitive object={caveLines} />
     </>
   )
 }

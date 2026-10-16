@@ -19,6 +19,7 @@ beforeEach(() => {
     resizeBrush: vi.fn<(f: number) => void>(),
     deselectTool: vi.fn(),
     featureKey: vi.fn<ShortcutHandlers['featureKey']>(() => false),
+    toggleTool: vi.fn<ShortcutHandlers['toggleTool']>(),
   }
   uninstall = installEditorShortcuts(window, h)
 })
@@ -62,6 +63,19 @@ describe('editor shortcuts', () => {
     expect(press({ key: 'Escape' }).defaultPrevented).toBe(false)
     expect(press({ key: 'Enter' }).defaultPrevented).toBe(false)
     expect(h.deselectTool).toHaveBeenCalledTimes(1)
+  })
+
+  it('toggles the Cave tool with C, but not from a text field or with a modifier', () => {
+    press({ key: 'c' })
+    press({ key: 'C', shiftKey: true })
+    expect(h.toggleTool).toHaveBeenCalledTimes(2)
+    expect(h.toggleTool).toHaveBeenCalledWith('cave')
+    press({ key: 'c', metaKey: true })
+    const field = document.createElement('input')
+    document.body.appendChild(field)
+    press({ key: 'c' }, field)
+    field.remove()
+    expect(h.toggleTool).toHaveBeenCalledTimes(2)
   })
 
   it('does not offer feature keys from a text field or with a modifier', () => {
@@ -113,6 +127,7 @@ describe('editor shortcuts', () => {
     const store = createEditorStore()
     uninstall = installEditorShortcuts(window, {
       save: () => {},
+      toggleTool: () => {},
       undo: () => store.getState().undo(),
       redo: () => store.getState().redo(),
       resizeBrush: () => {},
@@ -145,6 +160,7 @@ describe('editor shortcuts with brush panel controls focused', () => {
     resizeBrush: vi.fn<(f: number) => void>(),
     deselectTool: vi.fn(),
     featureKey: vi.fn<ShortcutHandlers['featureKey']>(() => false),
+    toggleTool: vi.fn<ShortcutHandlers['toggleTool']>(),
   }
     uninstall = installEditorShortcuts(window, h)
   })

@@ -64,6 +64,10 @@ export default function App() {
         resizeBrush: (f) => useEditorStore.getState().resizeBrush(f),
         deselectTool: () => useEditorStore.getState().setTool(null),
         featureKey: (k) => useEditorStore.getState().featureKeys?.key(k) ?? false,
+        toggleTool: (t) => {
+          const s = useEditorStore.getState()
+          s.setTool(s.tool === t ? null : t)
+        },
       }),
     [deps],
   )

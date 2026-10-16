@@ -17,12 +17,13 @@ import type { RenderBackend } from '../viewport/renderBackend'
 
 export type Message = { kind: 'error' | 'info'; text: string } | null
 
-export type ToolId = 'terrain' | 'paint' | 'path' | 'river' | 'water'
+export type ToolId = 'terrain' | 'paint' | 'path' | 'river' | 'water' | 'cave'
 
 /** The tools that paint with a brush. */
 export const isBrushTool = (t: ToolId | null): t is 'terrain' | 'paint' => t === 'terrain' || t === 'paint'
 
-export type Selection = { kind: 'spline' | 'pond'; id: string } | null
+/** The selected feature; for a cave, also its selected point (null for none). */
+export type Selection = { kind: 'spline' | 'pond'; id: string } | { kind: 'cave'; id: string; point: number | null } | null
 
 /** The active feature tool's keyboard and undo hooks, registered by its viewport rig. */
 export interface FeatureKeys {
