@@ -218,13 +218,15 @@ function paint(surface: SurfaceMap, idx: number, kind: number): void {
 }
 
 /**
- * Marks biome samples (1 m grid) inside `rect` that lie within a spline's width plus its clear margin; clears
- * the rest of `rect`.
+ * Marks biome samples (1 m grid) inside `rect` that are the nearest sample to any point within a spline's
+ * width plus its clear margin; clears the rest of `rect`.
  */
 export function exclusionRect(profiles: SplineProfile[], biomeRes: number, size: SceneSize, rect: Rect, out: Uint8Array): void {
   for (let j = rect.z0; j <= rect.z1; j++) out.fill(0, j * biomeRes + rect.x0, j * biomeRes + rect.x1 + 1)
   for (const p of carvingOrder(profiles)) {
-    const radius = p.spline.width / 2 + FEATURES[p.spline.kind].clearMargin
+    // Scatter looks up the nearest sample, up to √½ m from the candidate; padding by that much keeps every candidate
+    // within width/2 + margin of the centreline off the ground.
+    const radius = p.spline.width / 2 + FEATURES[p.spline.kind].clearMargin + Math.SQRT1_2
     const box = indexRect(splineBounds(p.samples, radius), size, 1, biomeRes)
     const r = box && intersect(box, rect)
     if (r) nearestInRect(p, r, size, 1, radius, (i, j) => (out[j * biomeRes + i] = 1))

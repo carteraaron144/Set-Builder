@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { createFlatLayers, heightAt, type Heightmap, type Rect } from '../terrain/layers'
 import { carveRect, exclusionRect, profileSpline, SURFACE, type SplineProfile, type SurfaceMap } from './carve'
 import { FEATURES, type Spline, type SplinePoint } from './features'
+import { nearestOnSamples } from './spline'
 
 const SIZE = 64
 const H_RES = SIZE * 2 + 1
@@ -232,6 +233,19 @@ describe('exclusionRect', () => {
     const edge = Math.floor(2 + FEATURES.river.clearMargin)
     expect(out[(edge + SIZE / 2) * B_RES + SIZE / 2]).toBe(1)
     expect(out[(edge + 2 + SIZE / 2) * B_RES + SIZE / 2]).toBe(0)
+  })
+
+  it('marks the nearest sample of every point within the width plus margin, as scatter looks it up', () => {
+    const diagonal = spline('path', [{ x: -24, z: -20 }, { x: 0, z: 3 }, { x: 24, z: 22 }])
+    const p = profileSpline(slope(), diagonal)
+    const out = new Uint8Array(B_RES * B_RES)
+    exclusionRect([p], B_RES, SIZE, { x0: 0, z0: 0, x1: B_RES - 1, z1: B_RES - 1 }, out)
+    const reach = diagonal.width / 2 + FEATURES.path.clearMargin
+    for (let z = -28; z <= 28; z += 0.1)
+      for (let x = -28; x <= 28; x += 0.1) {
+        if (nearestOnSamples(p.samples, x, z).distance > reach) continue
+        expect(out[Math.round(z + SIZE / 2) * B_RES + Math.round(x + SIZE / 2)]).toBe(1)
+      }
   })
 
   it('clears its rect first', () => {
