@@ -8,6 +8,7 @@ import {
   type Features,
 } from '../features/features'
 import { MAX_HEIGHT, MIN_HEIGHT } from '../terrain/layers'
+import { arrowHit, AXIS_DIR, axisParam, type Axis } from './axisGizmo'
 import { HANDLE_RADIUS, type SplineKey, type SplineResult } from './splineInput'
 
 interface Vec {
@@ -68,16 +69,25 @@ export function editCavePoint(f: Features, id: string, index: number, change: Pa
 export class CaveInput {
   private readonly getFeatures: () => Features
   private readonly half: number
+  private readonly gizmoLength: (at: Vec) => number
   private points: CavePoint[] | null = null
   private selected: string | null = null
   private point: number | null = null
   private hovered: number | null = null
-  private drag: { index: number; y: number; moved: Features | null } | null = null
+  private hoveredArrow: Axis | null = null
+  private drag: { index: number; y: number; moved: Features | null; axis?: { axis: Axis; start: Vec; from: number } } | null = null
   private swallowClick = false
 
-  constructor(getFeatures: () => Features, size: number) {
+  /** `gizmoLength` is the arrow length at a point, which the viewport scales with the camera distance. */
+  constructor(getFeatures: () => Features, size: number, gizmoLength: (at: Vec) => number = () => 4) {
     this.getFeatures = getFeatures
     this.half = size / 2
+    this.gizmoLength = gizmoLength
+  }
+
+  /** The arrow of the selected point's gizmo under the pointer. */
+  get hoveredAxis(): Axis | null {
+    return this.hoveredArrow
   }
 
   get draft(): CavePoint[] | null {
@@ -102,6 +112,7 @@ export class CaveInput {
     this.selected = id
     this.point = id === null ? null : point
     this.hovered = null
+    this.hoveredArrow = null
   }
 
   click(hit: Vec | null, ray: Ray): SplineResult | null {
@@ -140,6 +151,16 @@ export class CaveInput {
   pointerDown(ray: Ray): SplineResult | null {
     const c = this.selectedCave()
     if (this.points || !c) return null
+    const grabbed = this.arrowAt(c, ray)
+    if (grabbed) {
+      const start = c.points[grabbed.index]
+      const from = axisParam(ray, start, grabbed.axis)
+      if (from !== null) {
+        this.drag = { index: grabbed.index, y: start.y, moved: null, axis: { axis: grabbed.axis, start: { x: start.x, y: start.y, z: start.z }, from } }
+        this.hoveredArrow = grabbed.axis
+        return {}
+      }
+    }
     const index = this.handleAt(c, ray)
     if (index === null) return null
     this.drag = { index, y: c.points[index].y, moved: null }
@@ -155,8 +176,10 @@ export class CaveInput {
     const d = this.drag
     if (!d) {
       this.hovered = this.points ? null : this.handleAt(c, ray)
+      this.hoveredArrow = this.points ? null : (this.arrowAt(c, ray)?.axis ?? null)
       return null
     }
+    if (d.axis) return this.dragAlongAxis(c, d, d.axis, ray)
     if (Math.abs(ray.dir.y) < 1e-6) return null
     const t = (d.y - ray.origin.y) / ray.dir.y
     if (t <= 0) return null
@@ -174,6 +197,7 @@ export class CaveInput {
     const d = this.drag
     if (!d) return null
     this.drag = null
+    this.hoveredArrow = null
     this.swallowClick = true
     return d.moved ? { commit: d.moved } : {}
   }
@@ -224,6 +248,31 @@ export class CaveInput {
     const cave: Cave = { id: crypto.randomUUID(), radius: FEATURES.cave.radius.default, points }
     this.select(cave.id)
     return { commit: { ...f, caves: [...f.caves, cave] } }
+  }
+
+  /** The arrow of the selected point's gizmo under the ray. */
+  private arrowAt(c: Cave, ray: Ray): { index: number; axis: Axis } | null {
+    const index = this.selectedPoint
+    if (index === null) return null
+    const p = c.points[index]
+    const axis = arrowHit(ray, p, this.gizmoLength(p), ['x', 'y', 'z'])
+    return axis ? { index, axis } : null
+  }
+
+  /** Mid-drag on an arrow: the point moves by how far the pointer has travelled along that axis. */
+  private dragAlongAxis(c: Cave, d: NonNullable<CaveInput['drag']>, a: { axis: Axis; start: Vec; from: number }, ray: Ray): SplineResult | null {
+    const s = axisParam(ray, a.start, a.axis)
+    if (s === null) return null
+    const dir = AXIS_DIR[a.axis]
+    const delta = s - a.from
+    const p = this.clamp({ x: a.start.x + dir.x * delta, y: a.start.y + dir.y * delta, z: a.start.z + dir.z * delta })
+    if (!p) return null
+    const f = this.getFeatures()
+    d.moved = {
+      ...f,
+      caves: f.caves.map((q) => (q.id === c.id ? { ...q, points: q.points.map((o, k) => (k === d.index ? { ...o, x: p.x, y: p.y, z: p.z } : o)) } : q)),
+    }
+    return { preview: d.moved }
   }
 
   private selectedCave(): Cave | undefined {

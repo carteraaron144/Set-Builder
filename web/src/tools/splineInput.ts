@@ -8,6 +8,22 @@ import {
   type SplinePoint,
 } from '../features/features'
 import { nearestOnSamples, sampleSpline, snapToEnd } from '../features/spline'
+import { arrowHit, AXIS_DIR, axisParam, type Axis } from './axisGizmo'
+
+/** A pick ray in world space; `dir` need not be normalised. */
+export interface PickRay {
+  origin: { x: number; y: number; z: number }
+  dir: { x: number; y: number; z: number }
+}
+
+/** Where a selected point's arrows sit: its handle's height, and how long they are there. */
+export interface SplineGizmo {
+  y(p: SplinePoint): number
+  length(at: { x: number; y: number; z: number }): number
+}
+
+const DEFAULT_GIZMO: SplineGizmo = { y: () => 0, length: () => 4 }
+const SPLINE_AXES: readonly Axis[] = ['x', 'z']
 
 export type SplineKey = 'Enter' | 'Escape' | 'Backspace' | 'Delete'
 
@@ -39,10 +55,14 @@ export class SplineInput {
   private points: SplinePoint[] | null = null
   private selected: string | null = null
   private hovered: number | null = null
-  private drag: { index: number; moved: Features | null } | null = null
+  private point: number | null = null
+  private hoveredArrow: Axis | null = null
+  private readonly gizmo: SplineGizmo
+  private drag: { index: number; moved: Features | null; axis?: { axis: Axis; start: SplinePoint; from: number } } | null = null
   private swallowClick = false
 
-  constructor(kind: SplineKind, getFeatures: () => Features, size: number, getStyle: () => PathStyle = () => 'dirt') {
+  constructor(kind: SplineKind, getFeatures: () => Features, size: number, getStyle: () => PathStyle = () => 'dirt', gizmo: SplineGizmo = DEFAULT_GIZMO) {
+    this.gizmo = gizmo
     this.kind = kind
     this.getFeatures = getFeatures
     this.half = size / 2
@@ -63,9 +83,22 @@ export class SplineInput {
     return this.hovered
   }
 
+  /** The selected path's selected point, which shows arrows. */
+  get selectedPoint(): number | null {
+    const s = this.selectedSpline()
+    return s && this.point !== null && this.point < s.points.length ? this.point : null
+  }
+
+  /** The arrow of the selected point's gizmo under the pointer (the x and z axes). */
+  get hoveredAxis(): Axis | null {
+    return this.hoveredArrow
+  }
+
   select(id: string | null): void {
     this.selected = id
+    this.point = null
     this.hovered = null
+    this.hoveredArrow = null
   }
 
   click(at: SplinePoint, opts: { alt: boolean }): SplineResult | null {
@@ -109,37 +142,55 @@ export class SplineInput {
     return this.finish()
   }
 
-  pointerDown(at: SplinePoint): SplineResult | null {
+  /** Grabs an arrow of the selected point, or a handle of the selected path. `ray` is needed for the arrows. */
+  pointerDown(at: SplinePoint | null, ray?: PickRay): SplineResult | null {
     const sel = this.selectedSpline()
-    const p = this.clamp(at)
-    if (this.points || !sel || !p) return null
+    if (this.points || !sel) return null
+    const grabbed = ray && this.arrowAt(sel, ray)
+    if (grabbed) {
+      const start = sel.points[grabbed.index]
+      const from = axisParam(ray, this.origin(start), grabbed.axis)
+      if (from !== null) {
+        this.drag = { index: grabbed.index, moved: null, axis: { axis: grabbed.axis, start, from } }
+        this.hoveredArrow = grabbed.axis
+        return {}
+      }
+    }
+    const p = at && this.clamp(at)
+    if (!p) return null
     const index = this.handleAt(sel, p)
     if (index === null) return null
     this.drag = { index, moved: null }
+    this.point = index
     this.hovered = index
     return {}
   }
 
-  pointerMove(at: SplinePoint): SplineResult | null {
+  pointerMove(at: SplinePoint | null, ray?: PickRay): SplineResult | null {
     const sel = this.selectedSpline()
-    const p = this.clamp(at)
-    if (!sel || !p) return null
+    if (!sel) return null
+    const axis = this.drag?.axis
+    if (this.drag && axis) {
+      const s = ray ? axisParam(ray, this.origin(axis.start), axis.axis) : null
+      if (s === null) return null
+      const d = AXIS_DIR[axis.axis]
+      const delta = s - axis.from
+      return this.moveTo(sel, this.drag, this.clamp({ x: axis.start.x + d.x * delta, z: axis.start.z + d.z * delta }))
+    }
     if (!this.drag) {
-      this.hovered = this.points ? null : this.handleAt(sel, p)
+      this.hoveredArrow = this.points || !ray ? null : (this.arrowAt(sel, ray)?.axis ?? null)
+      const p = at && this.clamp(at)
+      this.hovered = this.points || !p ? null : this.handleAt(sel, p)
       return null
     }
-    const i = this.drag.index
-    const isEnd = i === 0 || i === sel.points.length - 1
-    const moved = isEnd ? snapToEnd(p, this.getFeatures().splines, this.kind, sel.id) : p
-    const next = this.replace(sel.id, (s) => ({ ...s, points: s.points.map((q, k) => (k === i ? moved : q)) }))
-    this.drag.moved = next
-    return { preview: next }
+    return this.moveTo(sel, this.drag, at && this.clamp(at))
   }
 
   pointerUp(): SplineResult | null {
     const d = this.drag
     if (!d) return null
     this.drag = null
+    this.hoveredArrow = null
     this.swallowClick = true
     return d.moved ? { commit: d.moved } : {}
   }
@@ -158,7 +209,8 @@ export class SplineInput {
     const sel = this.selectedSpline()
     if (!sel || k === 'Enter') return null
     if (k === 'Escape') {
-      this.select(null)
+      if (this.point !== null) this.point = null
+      else this.select(null)
       return {}
     }
     const i = this.hovered
@@ -205,6 +257,30 @@ export class SplineInput {
       if (nearestOnSamples(sm, sel.points[k].x, sel.points[k].z).s <= near.s) after = k
     const points = [...sel.points.slice(0, after + 1), p, ...sel.points.slice(after + 1)]
     return { commit: this.replace(sel.id, (s) => ({ ...s, points })) }
+  }
+
+  /** World position of a path point's handle, where its arrows start. */
+  private origin(p: SplinePoint) {
+    return { x: p.x, y: this.gizmo.y(p), z: p.z }
+  }
+
+  private arrowAt(sel: Spline, ray: PickRay): { index: number; axis: Axis } | null {
+    const index = this.selectedPoint
+    if (index === null) return null
+    const o = this.origin(sel.points[index])
+    const axis = arrowHit(ray, o, this.gizmo.length(o), SPLINE_AXES)
+    return axis ? { index, axis } : null
+  }
+
+  /** Previews point `drag.index` of `sel` at `p` (snapping the ends of the path to others'). */
+  private moveTo(sel: Spline, drag: NonNullable<SplineInput['drag']>, p: SplinePoint | null): SplineResult | null {
+    if (!p) return null
+    const i = drag.index
+    const isEnd = i === 0 || i === sel.points.length - 1
+    const moved = isEnd ? snapToEnd(p, this.getFeatures().splines, this.kind, sel.id) : p
+    const next = this.replace(sel.id, (s) => ({ ...s, points: s.points.map((q, k) => (k === i ? moved : q)) }))
+    drag.moved = next
+    return { preview: next }
   }
 
   private selectedSpline(): Spline | undefined {

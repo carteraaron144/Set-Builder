@@ -4,15 +4,20 @@ import {
   BufferAttribute,
   BufferGeometry,
   Color,
+  ConeGeometry,
+  CylinderGeometry,
+  Group,
   InstancedMesh,
   Line,
   LineBasicMaterial,
   LineSegments,
   Matrix4,
+  Mesh,
   MeshBasicMaterial,
   Raycaster,
   SphereGeometry,
   Vector2,
+  Vector3,
 } from 'three'
 import { useEditorStore } from '../editor/editorStore'
 import { sampleCave } from '../features/caves'
@@ -21,6 +26,7 @@ import { sampleSpline } from '../features/spline'
 import { heightAt } from '../terrain/layers'
 import type { Scene } from '../scene/scene'
 import type { TerrainEditor } from '../terrain/terrainEditor'
+import { gizmoLength, type Axis } from '../tools/axisGizmo'
 import { CaveInput, type Ray } from '../tools/caveInput'
 import { PondInput } from '../tools/pondInput'
 import { SplineInput, type SplineResult } from '../tools/splineInput'
@@ -30,6 +36,36 @@ const LIFT = 0.15 // metres above the ground
 const HANDLE = new Color('#ffffff')
 const HOVERED = new Color('#ffd34d')
 const DRAFT = new Color('#7fd0ff')
+const AXIS_COLORS: Record<Axis, string> = { x: '#e5534b', y: '#6cc24a', z: '#4c8bf5' }
+const AXES: Axis[] = ['x', 'y', 'z']
+
+/** Three arrows along +x, +y and +z from the origin, unit length (scaled to fit the view), drawn over the ground. */
+function createGizmo(): { group: Group; materials: Record<Axis, MeshBasicMaterial>; arrows: Record<Axis, Group> } {
+  const group = new Group()
+  group.visible = false
+  const materials = {} as Record<Axis, MeshBasicMaterial>
+  const arrows = {} as Record<Axis, Group>
+  for (const axis of AXES) {
+    const material = new MeshBasicMaterial({ color: AXIS_COLORS[axis], depthTest: false, transparent: true })
+    const arrow = new Group()
+    // Built along +y, from a quarter of the way out (clear of the point's handle) to the tip.
+    const shaft = new Mesh(new CylinderGeometry(0.02, 0.02, 0.6, 8), material)
+    shaft.position.y = 0.55
+    const tip = new Mesh(new ConeGeometry(0.06, 0.15, 12), material)
+    tip.position.y = 0.925
+    for (const m of [shaft, tip]) {
+      m.renderOrder = 11
+      m.frustumCulled = false
+      arrow.add(m)
+    }
+    if (axis === 'x') arrow.rotation.z = -Math.PI / 2
+    if (axis === 'z') arrow.rotation.x = Math.PI / 2
+    group.add(arrow)
+    materials[axis] = material
+    arrows[axis] = arrow
+  }
+  return { group, materials, arrows }
+}
 
 function createHandles(): InstancedMesh {
   const mesh = new InstancedMesh(
@@ -73,9 +109,11 @@ export function FeatureRig({ terrain, scene }: { terrain: TerrainEditor; scene: 
   const [handles] = useState(createHandles)
   const [line] = useState(createLine)
   const [caveLines] = useState(createCaveLines)
+  const [gizmo] = useState(createGizmo)
   const inputRef = useRef<SplineInput | PondInput | CaveInput | null>(null)
   const hover = useRef<SplinePoint | null>(null)
   const pendingDrag = useRef<SplinePoint | null>(null)
+  const pendingSplineRay = useRef<Ray | null>(null)
   const pendingRay = useRef<Ray | null>(null)
   const pendingY = useRef<number | null>(null)
   const changed = useRef(true)
@@ -88,17 +126,22 @@ export function FeatureRig({ terrain, scene }: { terrain: TerrainEditor; scene: 
       ;(line.material as LineBasicMaterial).dispose()
       caveLines.geometry.dispose()
       ;(caveLines.material as LineBasicMaterial).dispose()
+      gizmo.group.traverse((o) => (o as Mesh).geometry?.dispose())
+      Object.values(gizmo.materials).forEach((m) => m.dispose())
     },
-    [handles, line, caveLines],
+    [handles, line, caveLines, gizmo],
   )
 
   useEffect(() => {
     changed.current = true
     if (!kind) return
     const store = useEditorStore
+    const heightOf = (p: SplinePoint) => heightAt(terrain.ground.layers.heights, p.x, p.z) + LIFT
+    const reach = new Vector3()
+    const length = (at: { x: number; y: number; z: number }) => gizmoLength(camera.position.distanceTo(reach.set(at.x, at.y, at.z)))
     const input =
       kind === 'cave'
-        ? new CaveInput(() => terrain.features, scene.size)
+        ? new CaveInput(() => terrain.features, scene.size, length)
         : kind === 'water'
         ? new PondInput(
             () => terrain.features,
@@ -106,7 +149,7 @@ export function FeatureRig({ terrain, scene }: { terrain: TerrainEditor; scene: 
             () => terrain.ground.ponds,
             scene.size,
           )
-        : new SplineInput(kind, () => terrain.features, scene.size, () => store.getState().pathStyle)
+        : new SplineInput(kind, () => terrain.features, scene.size, () => store.getState().pathStyle, { y: heightOf, length })
     const splines = input instanceof SplineInput ? input : null
     const caves = input instanceof CaveInput ? input : null
     inputRef.current = input
@@ -149,10 +192,12 @@ export function FeatureRig({ terrain, scene }: { terrain: TerrainEditor; scene: 
       const p = pendingDrag.current
       const y = pendingY.current
       const ray = pendingRay.current
+      const splineRay = pendingSplineRay.current
       pendingDrag.current = null
       pendingY.current = null
       pendingRay.current = null
-      if (p && splines) apply(splines.pointerMove(p))
+      pendingSplineRay.current = null
+      if ((p || splineRay) && splines) apply(splines.pointerMove(p, splineRay ?? undefined))
       if (ray && caves) apply(caves.pointerMove(ray))
       if (y !== null && input instanceof PondInput) apply(input.pointerMove(y))
     }
@@ -164,10 +209,14 @@ export function FeatureRig({ terrain, scene }: { terrain: TerrainEditor; scene: 
         const c = cast(e)
         if (!c) return
         r = caves.pointerDown(c.ray)
+      } else if (splines) {
+        const c = cast(e)
+        if (!c) return
+        r = splines.pointerDown(c.hit ? { x: c.hit.x, z: c.hit.z } : null, c.ray)
       } else {
         const p = pick(e)
         if (!p) return
-        r = splines ? splines.pointerDown(p) : (input as PondInput).pointerDown(p, e.clientY)
+        r = (input as PondInput).pointerDown(p, e.clientY)
       }
       if (!apply(r) || r?.message) return
       dragging = true
@@ -179,7 +228,11 @@ export function FeatureRig({ terrain, scene }: { terrain: TerrainEditor; scene: 
     }
     const onPointerMove = (e: PointerEvent) => {
       if (dragging) {
-        if (splines) pendingDrag.current = pick(e) ?? pendingDrag.current
+        if (splines) {
+          const c = cast(e)
+          if (c?.hit) pendingDrag.current = { x: c.hit.x, z: c.hit.z }
+          if (c) pendingSplineRay.current = c.ray
+        }
         else if (caves) pendingRay.current = cast(e)?.ray ?? pendingRay.current
         else pendingY.current = e.clientY
         return
@@ -191,10 +244,11 @@ export function FeatureRig({ terrain, scene }: { terrain: TerrainEditor; scene: 
         hover.current = c?.hit ? { x: c.hit.x, z: c.hit.z } : null
         if (c) caves.pointerMove(c.ray)
       } else {
-        hover.current = pick(e)
-        if (hover.current) splines?.pointerMove(hover.current)
+        const c = cast(e)
+        hover.current = c?.hit ? { x: c.hit.x, z: c.hit.z } : null
+        if (c) splines?.pointerMove(hover.current, c.ray)
       }
-      element.style.cursor = input.hoveredHandle !== null ? 'pointer' : 'crosshair'
+      element.style.cursor = input.hoveredHandle !== null || input.hoveredAxis !== null ? 'pointer' : 'crosshair'
     }
     /** Commits a drag in progress: on release, and before undo or a tool change so no preview is left over. */
     const endDrag = () => {
@@ -279,12 +333,39 @@ export function FeatureRig({ terrain, scene }: { terrain: TerrainEditor; scene: 
     }
   }, [kind, terrain, scene.size, element, camera])
 
+  /** Arrows on the selected point (a cave's or path's), sized to the camera distance; hidden otherwise. */
+  const updateGizmo = () => {
+    const input = inputRef.current
+    let at: Vector3 | null = null
+    let axes: Axis[] = []
+    if (input instanceof CaveInput && input.selectedPoint !== null) {
+      const p = terrain.features.caves.find((c) => c.id === input.selectedId)?.points[input.selectedPoint]
+      if (p) at = new Vector3(p.x, p.y, p.z)
+      axes = AXES
+    } else if (input instanceof SplineInput && input.selectedPoint !== null) {
+      const p = terrain.features.splines.find((s) => s.id === input.selectedId)?.points[input.selectedPoint]
+      if (p) at = new Vector3(p.x, heightAt(terrain.ground.layers.heights, p.x, p.z) + LIFT, p.z)
+      axes = ['x', 'z']
+    }
+    gizmo.group.visible = at !== null && !(input instanceof SplineInput && input.draft) && !(input instanceof CaveInput && input.draft)
+    if (!at) return
+    gizmo.group.position.copy(at)
+    gizmo.group.scale.setScalar(gizmoLength(camera.position.distanceTo(at)))
+    const hovered = input instanceof CaveInput || input instanceof SplineInput ? input.hoveredAxis : null
+    for (const axis of AXES) {
+      gizmo.arrows[axis].visible = axes.includes(axis)
+      gizmo.materials[axis].color.set(axis === hovered ? HOVERED : AXIS_COLORS[axis])
+    }
+  }
+
   useFrame(() => {
     const input = inputRef.current
-    if (input instanceof SplineInput && pendingDrag.current) {
+    if (input instanceof SplineInput && (pendingDrag.current || pendingSplineRay.current)) {
       const p = pendingDrag.current
+      const ray = pendingSplineRay.current
       pendingDrag.current = null
-      const r = input.pointerMove(p)
+      pendingSplineRay.current = null
+      const r = input.pointerMove(p, ray ?? undefined)
       if (r?.preview) terrain.previewFeatures(r.preview)
       changed.current = true
     }
@@ -300,6 +381,7 @@ export function FeatureRig({ terrain, scene }: { terrain: TerrainEditor; scene: 
       if (r?.preview) terrain.previewFeatures(r.preview)
       changed.current = true
     }
+    updateGizmo()
     if (!changed.current) return
     changed.current = false
     const heights = terrain.ground.layers.heights
@@ -384,6 +466,7 @@ export function FeatureRig({ terrain, scene }: { terrain: TerrainEditor; scene: 
       <primitive object={handles} />
       <primitive object={line} />
       <primitive object={caveLines} />
+      <primitive object={gizmo.group} />
     </>
   )
 }

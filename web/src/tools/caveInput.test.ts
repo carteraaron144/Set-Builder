@@ -149,3 +149,60 @@ describe('CaveInput editing', () => {
     expect(f.caves[0].points[0].y).toBe(2)
   })
 })
+
+describe('CaveInput axis arrows', () => {
+  /** A ray from the +x side along -x at height y, through z = 0. */
+  const side = (y: number, z = 0): Ray => ({ origin: P(100, y, z), dir: P(-1, 0, 0) })
+
+  it('moves the selected point along an arrow by how far the pointer travelled, as one commit', () => {
+    const { input, run, features } = setup(withCave())
+    input.select('c', 1)
+    // The x arrow runs 0–4 m from the point at (0, 1, 0): grab it at x = 2, drag to x = 5.
+    expect(input.pointerDown(down(2, 0))).not.toBeNull()
+    run(input.pointerMove(down(5, 0)))
+    expect(features().caves[0].points[1]).toMatchObject({ x: 3, y: 1, z: 0, chamber: 6 })
+    expect(input.pointerUp()?.commit).toBeDefined()
+  })
+
+  it('moves a point up and down along the y arrow', () => {
+    const { input, run, features } = setup(withCave())
+    input.select('c', 1)
+    expect(input.pointerDown(side(3))).not.toBeNull()
+    run(input.pointerMove(side(4.5)))
+    expect(features().caves[0].points[1]).toMatchObject({ x: 0, y: 2.5, z: 0 })
+  })
+
+  it('moves the other points of the cave not at all', () => {
+    const { input, run, features } = setup(withCave())
+    input.select('c', 1)
+    input.pointerDown(down(2, 0))
+    run(input.pointerMove(down(5, 0)))
+    expect(features().caves[0].points[0]).toEqual(cave().points[0])
+    expect(features().caves[0].points[2]).toEqual(cave().points[2])
+  })
+
+  it('reports the arrow under the pointer, and none away from them', () => {
+    const { input } = setup(withCave())
+    input.select('c', 1)
+    input.pointerMove(down(2, 0))
+    expect(input.hoveredAxis).toBe('x')
+    input.pointerMove(down(30, 30))
+    expect(input.hoveredAxis).toBeNull()
+  })
+
+  it('shows no arrows until a point is selected', () => {
+    const { input } = setup(withCave())
+    input.select('c')
+    input.pointerMove(down(2, 0))
+    expect(input.hoveredAxis).toBeNull()
+    expect(input.pointerDown(down(2, 0))).toBeNull()
+  })
+
+  it('keeps a dragged point inside the scene and the height limits', () => {
+    const { input, run, features } = setup(withCave())
+    input.select('c', 1)
+    input.pointerDown(down(2, 0))
+    run(input.pointerMove(down(500, 0)))
+    expect(features().caves[0].points[1].x).toBe(SIZE / 2)
+  })
+})

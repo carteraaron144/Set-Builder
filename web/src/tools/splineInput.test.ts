@@ -172,3 +172,64 @@ describe('SplineInput selecting and editing', () => {
     for (const s of features().splines) for (const p of s.points) expect(Number.isFinite(p.x) && Number.isFinite(p.z)).toBe(true)
   })
 })
+
+describe('SplineInput point selection and arrows', () => {
+  const ray = (x: number, y: number, z: number, dir = { x: 0, y: -1, z: 0 }) => ({ origin: { x, y, z }, dir })
+  const path = () => ({ ...emptyFeatures(), splines: [existing('s', 'path', [[-10, 0], [0, 0], [10, 0]])] })
+  const selectMiddle = () => {
+    const s = setup('path', path())
+    s.input.select('s')
+    s.input.pointerDown(P(0, 0))
+    s.run(s.input.pointerUp())
+    return s
+  }
+
+  it('selects the point whose handle is grabbed, and drops it on Escape before the path', () => {
+    const { input } = selectMiddle()
+    expect(input.selectedPoint).toBe(1)
+    expect(input.key('Escape')).not.toBeNull()
+    expect(input.selectedPoint).toBeNull()
+    expect(input.selectedId).toBe('s')
+    input.key('Escape')
+    expect(input.selectedId).toBeNull()
+  })
+
+  it('forgets the point when another path is selected', () => {
+    const { input } = selectMiddle()
+    input.select('s')
+    expect(input.selectedPoint).toBeNull()
+  })
+
+  it('moves the selected point along the x arrow, as one commit', () => {
+    const { input, run, features } = selectMiddle()
+    // The arrow starts at the handle (0.15 m up) and runs 4 m: grab it at x = 2, drag to x = 5.
+    expect(input.pointerDown(P(2, 0), ray(2, 100, 0))).not.toBeNull()
+    run(input.pointerMove(P(5, 0), ray(5, 100, 0)))
+    expect(features().splines[0].points[1]).toEqual(P(3, 0))
+    expect(features().splines[0].points[0]).toEqual(P(-10, 0))
+    expect(input.pointerUp()?.commit).toBeDefined()
+  })
+
+  it('moves the selected point along the z arrow', () => {
+    const { input, run, features } = selectMiddle()
+    input.pointerDown(P(0, 2), ray(0, 100, 2))
+    run(input.pointerMove(P(0, 4), ray(0, 100, 4)))
+    expect(features().splines[0].points[1]).toEqual(P(0, 2))
+  })
+
+  it('has no vertical arrow: the height follows the ground', () => {
+    const { input } = selectMiddle()
+    input.pointerMove(P(50, 50), ray(100, 2, 0, { x: -1, y: 0, z: 0 }))
+    expect(input.hoveredAxis).toBeNull()
+  })
+
+  it('reports the hovered arrow only when a point is selected', () => {
+    const { input } = selectMiddle()
+    input.pointerMove(P(2, 0), ray(2, 100, 0))
+    expect(input.hoveredAxis).toBe('x')
+    const none = setup('path', path())
+    none.input.select('s')
+    none.input.pointerMove(P(2, 0), ray(2, 100, 0))
+    expect(none.input.hoveredAxis).toBeNull()
+  })
+})
