@@ -228,3 +228,22 @@ describe('FeaturePanel point size', () => {
     expect(state().terrain.features.caves[0].points[0].radius).toBe(3)
   })
 })
+
+describe('FeaturePanel with the Select tool', () => {
+  const cave = { id: 'k', radius: 2, points: [{ x: 0, y: 0, z: 0, chamber: 0 }, { x: 5, y: 0, z: 0, chamber: 0 }] }
+
+  it('shows the panel for whatever is selected, whichever type', () => {
+    act(() => {
+      state().terrain.commitFeatures({ splines: [road], ponds: [{ id: 'w', seed: { x: 0, z: 0 }, level: 1 }], caves: [cave] })
+      state().setTool('select')
+    })
+    render(<FeaturePanel />)
+    expect(screen.getByText(/Click any handle/)).toBeInTheDocument()
+    act(() => state().setSelection({ kind: 'spline', id: 'a', point: 0 }))
+    expect(screen.getByRole('spinbutton', { name: 'Point width' })).toBeInTheDocument()
+    act(() => state().setSelection({ kind: 'cave', id: 'k', point: 1 }))
+    expect(screen.getByRole('spinbutton', { name: 'Point radius' })).toBeInTheDocument()
+    act(() => state().setSelection({ kind: 'pond', id: 'w' }))
+    expect(screen.getByRole('slider', { name: 'Level' })).toBeInTheDocument()
+  })
+})

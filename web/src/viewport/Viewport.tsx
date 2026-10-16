@@ -7,6 +7,7 @@ import type { TerrainEditor } from '../terrain/terrainEditor'
 import { CameraRig } from './CameraRig'
 import { CaveGlow } from './CaveGlow'
 import { FeatureRig } from './FeatureRig'
+import { SelectRig } from './SelectRig'
 import { BrushRig } from './BrushRig'
 import { browserSupport, detectSupport, forcedBackend, type RenderBackend } from './renderBackend'
 import { ScatterMesh } from './ScatterMesh'
@@ -77,6 +78,7 @@ export function Viewport({
         <CaveGlow terrain={terrain} />
         <WaterMesh terrain={terrain} />
         <FeatureRig terrain={terrain} scene={scene} />
+        <SelectRig terrain={terrain} scene={scene} />
         {library && <ScatterMesh terrain={terrain} scene={scene} library={library} />}
       </Canvas>
     </div>

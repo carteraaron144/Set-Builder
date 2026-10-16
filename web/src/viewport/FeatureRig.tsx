@@ -32,15 +32,15 @@ import { PondInput } from '../tools/pondInput'
 import { SplineInput, type SplineResult } from '../tools/splineInput'
 
 const MAX_HANDLES = 400
-const LIFT = 0.15 // metres above the ground
-const HANDLE = new Color('#ffffff')
-const HOVERED = new Color('#ffd34d')
+export const LIFT = 0.15 // metres above the ground
+export const HANDLE = new Color('#ffffff')
+export const HOVERED = new Color('#ffd34d')
 const DRAFT = new Color('#7fd0ff')
-const AXIS_COLORS: Record<Axis, string> = { x: '#e5534b', y: '#6cc24a', z: '#4c8bf5' }
-const AXES: Axis[] = ['x', 'y', 'z']
+export const AXIS_COLORS: Record<Axis, string> = { x: '#e5534b', y: '#6cc24a', z: '#4c8bf5' }
+export const AXES: Axis[] = ['x', 'y', 'z']
 
 /** Three arrows along +x, +y and +z from the origin, unit length (scaled to fit the view), drawn over the ground. */
-function createGizmo(): { group: Group; materials: Record<Axis, MeshBasicMaterial>; arrows: Record<Axis, Group> } {
+export function createGizmo(): { group: Group; materials: Record<Axis, MeshBasicMaterial>; arrows: Record<Axis, Group> } {
   const group = new Group()
   group.visible = false
   const materials = {} as Record<Axis, MeshBasicMaterial>
@@ -67,7 +67,7 @@ function createGizmo(): { group: Group; materials: Record<Axis, MeshBasicMateria
   return { group, materials, arrows }
 }
 
-function createHandles(): InstancedMesh {
+export function createHandles(): InstancedMesh {
   const mesh = new InstancedMesh(
     new SphereGeometry(0.45, 12, 8),
     new MeshBasicMaterial({ depthTest: false, transparent: true, opacity: 0.95 }),

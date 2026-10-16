@@ -7,6 +7,7 @@ const TOOLS: { id: ToolId | null; label: string }[] = [
   { id: 'river', label: 'River' },
   { id: 'water', label: 'Water' },
   { id: 'cave', label: 'Caves' },
+  { id: 'select', label: 'Select' },
   { id: null, label: 'Zones' },
   { id: null, label: 'Props' },
 ]

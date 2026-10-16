@@ -11,6 +11,7 @@ const STYLES: { id: PathStyle; label: string }[] = [
   { id: 'cobble', label: 'Cobble' },
 ]
 
+const SELECT_HINT = 'Click any handle to select it; drag it or its arrows to move it, [ and ] scale it, Delete removes it.'
 const POND_HINT = 'Click to make a pond and drag up or down to set its level. Click a pond to select it.'
 const CAVE_HINT =
   'Click the ground for the entrance, then click to add points at the same depth; double-click or Enter to finish. Click a point to select it and drag it; its height, radius and chamber are below; [ and ] scale its radius.'
@@ -26,11 +27,15 @@ export function FeaturePanel() {
   const pathStyle = useEditorStore((s) => s.pathStyle)
   const terrain = useEditorStore((s) => s.terrain)
   useEditorStore((s) => s.editVersion)
-  if (tool === 'water') return <PondPanel />
-  if (tool === 'cave') return <CavePanel />
-  if (tool !== 'path' && tool !== 'river') return null
-
   const spline = selection?.kind === 'spline' ? terrain.features.splines.find((s) => s.id === selection.id) : undefined
+  // With the Select tool the panel follows whatever is selected, not the tool.
+  const shown =
+    tool !== 'select' ? tool : selection?.kind === 'pond' ? 'water' : selection?.kind === 'cave' ? 'cave' : (spline?.kind ?? 'select')
+  if (shown === 'select') return <p className="panel-hint">{SELECT_HINT}</p>
+  if (shown === 'water') return <PondPanel />
+  if (shown === 'cave') return <CavePanel />
+  if (shown !== 'path' && shown !== 'river') return null
+
   const edit = (change: Partial<Spline>) => {
     const f = terrain.features
     if (!spline) return
@@ -40,8 +45,8 @@ export function FeaturePanel() {
   const style = spline?.kind === 'path' ? spline.style : pathStyle
 
   return (
-    <div className="brush-panel" aria-label={tool === 'path' ? 'Path' : 'River'}>
-      {tool === 'path' && (
+    <div className="brush-panel" aria-label={shown === 'path' ? 'Path' : 'River'}>
+      {shown === 'path' && (
         <div role="radiogroup" aria-label="Style" className="choice-group">
           {STYLES.map(({ id, label }) => (
             <label key={id} className="choice">

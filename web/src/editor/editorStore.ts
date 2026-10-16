@@ -22,7 +22,7 @@ export type Message = { kind: 'error' | 'info'; text: string } | null
 export const CAVE_REMESH_DELAYS = [0, 30, 60, 120, 240] as const
 export type CaveRemeshDelay = (typeof CAVE_REMESH_DELAYS)[number]
 
-export type ToolId = 'terrain' | 'paint' | 'path' | 'river' | 'water' | 'cave'
+export type ToolId = 'terrain' | 'paint' | 'path' | 'river' | 'water' | 'cave' | 'select'
 
 /** The tools that paint with a brush. */
 export const isBrushTool = (t: ToolId | null): t is 'terrain' | 'paint' => t === 'terrain' || t === 'paint'

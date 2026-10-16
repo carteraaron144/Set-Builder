@@ -65,6 +65,13 @@ describe('editor shortcuts', () => {
     expect(h.deselectTool).toHaveBeenCalledTimes(1)
   })
 
+  it('toggles the Select tool with S, but not with a modifier (Cmd+S saves)', () => {
+    press({ key: 's' })
+    expect(h.toggleTool).toHaveBeenCalledWith('select')
+    press({ key: 's', metaKey: true })
+    expect(h.toggleTool).toHaveBeenCalledTimes(1)
+  })
+
   it('toggles the Cave tool with C, but not from a text field or with a modifier', () => {
     press({ key: 'c' })
     press({ key: 'C', shiftKey: true })

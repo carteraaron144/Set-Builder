@@ -46,6 +46,8 @@ export function installEditorShortcuts(target: Window, h: ShortcutHandlers): () 
       else if (e.key === 'Escape') h.deselectTool()
     } else if (!mod && !e.altKey && key === 'c') {
       h.toggleTool('cave')
+    } else if (!mod && !e.altKey && key === 's') {
+      h.toggleTool('select')
     }
   }
   target.addEventListener('keydown', onKeyDown)
