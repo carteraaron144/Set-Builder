@@ -15,6 +15,8 @@ export type SplineKind = 'path' | 'river'
 export interface SplinePoint {
   x: number
   z: number
+  /** Width at this point; the spline's own width where unset. */
+  width?: number
 }
 
 /** A path or river: a curve through its points. `style` only matters for paths. */
@@ -39,6 +41,8 @@ export interface CavePoint {
   y: number
   z: number
   chamber: number
+  /** Tunnel radius at this point; the cave's own radius where unset. */
+  radius?: number
 }
 
 /** A tunnel of `radius` along a curve through its points, from the entrance (the first point). */
@@ -90,19 +94,28 @@ export function featuresSchema(size: SceneSize) {
   const half = size / 2
   const coord = z.number().min(-half).max(half)
   const point = z.object({ x: coord, z: coord })
+  const splinePoint = z.object({ x: coord, z: coord, width: z.number().finite().optional() })
   const spline = z
     .object({
       id: z.string().min(1),
       kind: z.enum(['path', 'river']),
       style: z.enum(['dirt', 'cobble']),
       width: z.number().finite(),
-      points: z.array(point).min(2).max(FEATURE_LIMITS.maxPoints),
+      points: z.array(splinePoint).min(2).max(FEATURE_LIMITS.maxPoints),
     })
-    .transform((s) => ({ ...s, width: clampWidth(s.kind, s.width) }))
+    .transform((s) => ({
+      ...s,
+      width: clampWidth(s.kind, s.width),
+      points: s.points.map(({ width, ...p }): SplinePoint => (width === undefined ? p : { ...p, width: clampWidth(s.kind, width) })),
+    }))
   const pond = z.object({ id: z.string().min(1), seed: point, level: z.number().finite() })
   const cavePoint = z
-    .object({ x: coord, y: z.number().min(MIN_HEIGHT).max(MAX_HEIGHT), z: coord, chamber: z.number().finite() })
-    .transform((p) => ({ ...p, chamber: clampChamber(p.chamber) }))
+    .object({ x: coord, y: z.number().min(MIN_HEIGHT).max(MAX_HEIGHT), z: coord, chamber: z.number().finite(), radius: z.number().finite().optional() })
+    .transform(({ radius, ...p }) => ({
+      ...p,
+      chamber: clampChamber(p.chamber),
+      ...(radius === undefined ? {} : { radius: clampCaveRadius(radius) }),
+    }))
   const cave = z
     .object({ id: z.string().min(1), radius: z.number().finite(), points: z.array(cavePoint).min(2).max(FEATURE_LIMITS.maxCavePoints) })
     .transform((c) => ({ ...c, radius: clampCaveRadius(c.radius) }))

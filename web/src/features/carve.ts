@@ -29,9 +29,9 @@ const smoothstep = (edge0: number, edge1: number, x: number) => {
   return t * t * (3 - 2 * t)
 }
 
-/** Half-width plus shoulder: how far from the centreline a spline changes heights. */
-function reachOf(s: Spline): number {
-  return s.width / 2 + FEATURES[s.kind].shoulder
+/** Half of the widest sample's width, plus `extra`: the farthest from the centreline the profile reaches. */
+function reachOf(p: { samples: SplineSamples }, extra: number): number {
+  return Math.max(...p.samples.widths) / 2 + extra
 }
 
 function riverDepth(width: number): number {
@@ -78,7 +78,7 @@ function smoothAlong(v: Float64Array, s: Float32Array, radius: number): Float32A
 }
 
 export function profileSpline(base: Heightmap, spline: Spline): SplineProfile {
-  const samples = sampleSpline(spline.points)
+  const samples = sampleSpline(spline.points, 0.5, spline.width)
   const n = samples.xs.length
   const raw = new Float64Array(n)
   for (let i = 0; i < n; i++) raw[i] = heightAt(base, samples.xs[i], samples.zs[i])
@@ -95,7 +95,7 @@ export function profileSpline(base: Heightmap, spline: Spline): SplineProfile {
     water = Float32Array.from(grade, (g) => g - FEATURES.river.freeboard)
   }
   const res = base.resolution
-  const footprint = indexRect(splineBounds(samples, reachOf(spline)), base.size, HEIGHT_SPACING, res)
+  const footprint = indexRect(splineBounds(samples, reachOf({ samples }, FEATURES[spline.kind].shoulder)), base.size, HEIGHT_SPACING, res)
   return { spline, samples, grade, water, footprint }
 }
 
@@ -105,7 +105,7 @@ const intersect = (a: Rect, b: Rect): Rect | null => {
 }
 
 /**
- * Visits every sample of `rect` (on a grid with the given spacing) within `radius` of the profile's centreline,
+ * Visits every sample of `rect` (on a grid with the given spacing) within half the local width plus `extra` of the profile's centreline,
  * with its distance to the nearest segment, that segment's index and the position t along it. A sample near
  * several segments is visited once, for the nearest (the earliest on ties), so results never depend on `rect`.
  */
@@ -114,10 +114,10 @@ function nearestInRect(
   rect: Rect,
   size: SceneSize,
   spacing: number,
-  radius: number,
+  extra: number,
   visit: (i: number, j: number, d: number, seg: number, t: number) => void,
 ): void {
-  const { xs, zs } = p.samples
+  const { xs, zs, widths } = p.samples
   const w = rect.x1 - rect.x0 + 1
   const dist = new Float64Array(w * (rect.z1 - rect.z0 + 1)).fill(Infinity)
   const seg = new Int32Array(dist.length)
@@ -129,6 +129,7 @@ function nearestInRect(
     const ex = xs[k + 1] - ax
     const ez = zs[k + 1] - az
     const len2 = ex * ex + ez * ez
+    const radius = Math.max(widths[k], widths[k + 1]) / 2 + extra
     const box = {
       x0: Math.floor((Math.min(ax, ax + ex) - radius + half) / spacing),
       z0: Math.floor((Math.min(az, az + ez) - radius + half) / spacing),
@@ -144,7 +145,7 @@ function nearestInRect(
         const t = len2 > 0 ? Math.min(1, Math.max(0, ((x - ax) * ex + (z - az) * ez) / len2)) : 0
         const d = Math.hypot(x - (ax + ex * t), z - (az + ez * t))
         const l = (j - rect.z0) * w + (i - rect.x0)
-        if (d <= radius && d < dist[l]) {
+        if (d < dist[l] && d <= (widths[k] + (widths[k + 1] - widths[k]) * t) / 2 + extra) {
           dist[l] = d
           seg[l] = k
           ts[l] = t
@@ -176,19 +177,19 @@ export function carveRect(base: Heightmap, profiles: SplineProfile[], rect: Rect
     outSurface.kind.fill(0, row + rect.x0, row + rect.x1 + 1)
     outSurface.weight.fill(0, row + rect.x0, row + rect.x1 + 1)
   }
-  const visitHeights = (p: SplineProfile, r: Rect, radius: number, visit: (idx: number, d: number, k: number, t: number) => void) =>
-    nearestInRect(p, r, base.size, HEIGHT_SPACING, radius, (i, j, d, k, t) => visit(j * res + i, d, k, t))
+  const visitHeights = (p: SplineProfile, r: Rect, extra: number, visit: (idx: number, d: number, k: number, t: number) => void) =>
+    nearestInRect(p, r, base.size, HEIGHT_SPACING, extra, (i, j, d, k, t) => visit(j * res + i, d, k, t))
   for (const p of carvingOrder(profiles)) {
     const r = intersect(p.footprint!, rect)
     if (!r) continue
     const s = p.spline
-    const hw = s.width / 2
     const shoulder = FEATURES[s.kind].shoulder
     const lerp = (a: Float32Array, k: number, t: number) => a[k] + (a[k + 1] - a[k]) * t
     if (s.kind === 'path') {
       const kind = s.style === 'cobble' ? SURFACE.cobble : SURFACE.dirt
-      const verge = hw + FEATURES.path.verge.width
-      visitHeights(p, r, hw + shoulder, (idx, d, k, t) => {
+      visitHeights(p, r, shoulder, (idx, d, k, t) => {
+        const hw = lerp(p.samples.widths, k, t) / 2
+        const verge = hw + FEATURES.path.verge.width
         const w = d <= hw ? 1 : 1 - smoothstep(hw, hw + shoulder, d)
         const h = outHeights[idx]
         if (w > 0) outHeights[idx] = h + (lerp(p.grade, k, t) - h) * w
@@ -196,8 +197,9 @@ export function carveRect(base: Heightmap, profiles: SplineProfile[], rect: Rect
         else if (d <= verge) paint(outSurface, idx, SURFACE.verge)
       })
     } else {
-      const depth = riverDepth(s.width)
-      visitHeights(p, r, hw + shoulder, (idx, d, k, t) => {
+      visitHeights(p, r, shoulder, (idx, d, k, t) => {
+        const hw = lerp(p.samples.widths, k, t) / 2
+        const depth = riverDepth(hw * 2)
         const h = outHeights[idx]
         if (d <= hw) {
           const bed = lerp(p.water!, k, t) - depth * (1 - (d / hw) ** 2)
@@ -226,9 +228,9 @@ export function exclusionRect(profiles: SplineProfile[], biomeRes: number, size:
   for (const p of carvingOrder(profiles)) {
     // Scatter looks up the nearest sample, up to √½ m from the candidate; padding by that much keeps every candidate
     // within width/2 + margin of the centreline off the ground.
-    const radius = p.spline.width / 2 + FEATURES[p.spline.kind].clearMargin + Math.SQRT1_2
-    const box = indexRect(splineBounds(p.samples, radius), size, 1, biomeRes)
+    const extra = FEATURES[p.spline.kind].clearMargin + Math.SQRT1_2
+    const box = indexRect(splineBounds(p.samples, reachOf(p, extra)), size, 1, biomeRes)
     const r = box && intersect(box, rect)
-    if (r) nearestInRect(p, r, size, 1, radius, (i, j) => (out[j * biomeRes + i] = 1))
+    if (r) nearestInRect(p, r, size, 1, extra, (i, j) => (out[j * biomeRes + i] = 1))
   }
 }

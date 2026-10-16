@@ -89,3 +89,27 @@ describe('profileCave', () => {
     for (const [x, y, z] of [[0, 0, 0], [3.3, -1.2, 1.7], [-11, 1, -4]]) expect(a.sdf(x, y, z)).toBe(b.sdf(x, y, z))
   })
 })
+
+describe('per-point radius', () => {
+  it('samples radii that interpolate between points and fall back to the cave radius', () => {
+    const c = tunnel({ points: [{ x: -10, y: 0, z: 0, chamber: 0 }, { x: 0, y: 0, z: 0, chamber: 0, radius: 4 }, { x: 10, y: 0, z: 0, chamber: 0 }] })
+    const sm = sampleCave(c.points, undefined, c.radius)
+    expect(sm.rs[0]).toBe(2)
+    expect(sm.rs[sm.rs.length - 1]).toBe(2)
+    const mid = Array.from(sm.xs).findIndex((x) => Math.abs(x) < 1e-4)
+    expect(sm.rs[mid]).toBeCloseTo(4)
+  })
+
+  it('opens a wider tunnel around a point with a larger radius', () => {
+    const pts = (r?: number) => [
+      { x: -10, y: 0, z: 0, chamber: 0 },
+      { x: 0, y: 0, z: 0, chamber: 0, radius: r },
+      { x: 10, y: 0, z: 0, chamber: 0 },
+    ]
+    const plain = profileCave(heights, tunnel({ points: pts() }))
+    const wide = profileCave(heights, tunnel({ points: pts(4) }))
+    expect(plain.sdf(0, 3, 0)).toBeGreaterThan(0)
+    expect(wide.sdf(0, 3, 0)).toBeLessThan(0)
+    expect(wide.bounds.z1).toBeGreaterThan(plain.bounds.z1)
+  })
+})

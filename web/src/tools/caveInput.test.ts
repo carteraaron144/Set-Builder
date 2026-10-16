@@ -206,3 +206,13 @@ describe('CaveInput axis arrows', () => {
     expect(features().caves[0].points[1].x).toBe(SIZE / 2)
   })
 })
+
+describe('editCavePoint radius', () => {
+  it('clamps a point radius to the cave radius range', () => {
+    const f: Features = { ...emptyFeatures(), caves: [{ id: 'c', radius: 2, points: [{ x: 0, y: 0, z: 0, chamber: 0 }, { x: 5, y: 0, z: 0, chamber: 0 }] }] }
+    const big = editCavePoint(f, 'c', 0, { radius: 1000 })
+    expect(big.caves[0].points[0].radius).toBe(FEATURES.cave.radius.max)
+    const small = editCavePoint(f, 'c', 0, { radius: 0 })
+    expect(small.caves[0].points[0].radius).toBe(FEATURES.cave.radius.min)
+  })
+})

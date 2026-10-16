@@ -56,7 +56,8 @@ export function editCavePoint(f: Features, id: string, index: number, change: Pa
   if (!cave || index < 0 || index >= cave.points.length) return f
   const edit = (p: CavePoint): CavePoint => {
     const q = { ...p, ...change }
-    return { ...q, y: clampY(q.y), chamber: clampChamber(q.chamber) }
+    const { radius, ...rest } = q
+    return { ...rest, y: clampY(q.y), chamber: clampChamber(q.chamber), ...(radius === undefined ? {} : { radius: clampCaveRadius(radius) }) }
   }
   return { ...f, caves: f.caves.map((c) => (c.id === id ? { ...c, points: c.points.map((p, k) => (k === index ? edit(p) : p)) } : c)) }
 }

@@ -10,6 +10,7 @@ import {
 } from '../terrain/brush'
 import { createFlatLayers, type BiomeId, type TerrainLayers } from '../terrain/layers'
 import { TerrainEditor } from '../terrain/terrainEditor'
+import { scaleSelectedPoint } from './pointScale'
 import type { PathStyle } from '../features/features'
 import type { ScatterManager } from '../scatter/scatterManager'
 import type { SplineKey } from '../tools/splineInput'
@@ -27,7 +28,7 @@ export type ToolId = 'terrain' | 'paint' | 'path' | 'river' | 'water' | 'cave'
 export const isBrushTool = (t: ToolId | null): t is 'terrain' | 'paint' => t === 'terrain' || t === 'paint'
 
 /** The selected feature; for a cave, also its selected point (null for none). */
-export type Selection = { kind: 'spline' | 'pond'; id: string } | { kind: 'cave'; id: string; point: number | null } | null
+export type Selection = { kind: 'pond'; id: string } | { kind: 'spline'; id: string; point: number | null } | { kind: 'cave'; id: string; point: number | null } | null
 
 /** The active feature tool's keyboard and undo hooks, registered by its viewport rig. */
 export interface FeatureKeys {
@@ -165,7 +166,12 @@ const initializer =
           },
         })
       },
-      resizeBrush: (factor) => get().setBrush({ radius: get().brush.radius * factor }),
+      resizeBrush: (factor) => {
+        const { terrain, selection } = get()
+        const scaled = scaleSelectedPoint(terrain.features, selection, factor)
+        if (scaled) terrain.commitFeatures(scaled)
+        else get().setBrush({ radius: get().brush.radius * factor })
+      },
       setInvertToggle: (invertToggle) => set({ invertToggle }),
       setTerraceStep: (m) => set({ terraceStep: clamp(m, 0.5, 5) }),
       setScatterVisible: (scatterVisible) => set({ scatterVisible }),

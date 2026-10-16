@@ -72,6 +72,16 @@ describe('features', () => {
     expect(parsed[0].points.map((p) => p.chamber)).toEqual([3, 12, 0])
   })
 
+  it('clamps per-point radii and widths, and omits them when unset', () => {
+    const c = cave({ points: [{ x: 0, y: 0, z: 0, chamber: 0, radius: 99 }, { x: 1, y: 0, z: 0, chamber: 0 }] })
+    const sp = path({ points: [{ x: 0, z: 0, width: 99 }, { x: 1, z: 0 }] })
+    const parsed = featuresSchema(64).parse({ splines: [sp], ponds: [], caves: [c] })
+    expect(parsed.caves[0].points[0].radius).toBe(4)
+    expect(parsed.caves[0].points[1]).not.toHaveProperty('radius')
+    expect(parsed.splines[0].points[0].width).toBe(8)
+    expect(parsed.splines[0].points[1]).not.toHaveProperty('width')
+  })
+
   it.each([
     ['a cave point outside the scene', withCaves([cave({ points: [{ x: 0, y: 0, z: 40, chamber: 0 }, { x: 0, y: 0, z: 0, chamber: 0 }] })])],
     ['a cave point too deep', withCaves([cave({ points: [{ x: 0, y: -33, z: 0, chamber: 0 }, { x: 0, y: 0, z: 0, chamber: 0 }] })])],

@@ -184,8 +184,13 @@ export function FeatureRig({ terrain, scene }: { terrain: TerrainEditor; scene: 
           store.getState().setSelection(id ? { kind: 'cave', id, point } : null)
         return r
       }
-      const selKind = splines ? 'spline' : 'pond'
-      if ((cur?.kind === selKind ? cur.id : null) !== id) store.getState().setSelection(id ? { kind: selKind, id } : null)
+      if (splines) {
+        const point = splines.selectedPoint
+        if (cur?.kind !== 'spline' ? id !== null : cur.id !== id || cur.point !== point)
+          store.getState().setSelection(id ? { kind: 'spline', id, point } : null)
+        return r
+      }
+      if ((cur?.kind === 'pond' ? cur.id : null) !== id) store.getState().setSelection(id ? { kind: 'pond', id } : null)
       return r
     }
     const flushDrag = () => {
@@ -301,8 +306,12 @@ export function FeatureRig({ terrain, scene }: { terrain: TerrainEditor; scene: 
         const id = sel?.kind === 'cave' ? sel.id : null
         const point = sel?.kind === 'cave' ? sel.point : null
         if (id !== caves.selectedId || point !== caves.selectedPoint) caves.select(id, point)
+      } else if (splines) {
+        const id = sel?.kind === 'spline' ? sel.id : null
+        const point = sel?.kind === 'spline' ? sel.point : null
+        if (id !== splines.selectedId || point !== splines.selectedPoint) splines.select(id, point)
       } else {
-        const id = sel?.kind === (splines ? 'spline' : 'pond') ? sel!.id : null
+        const id = sel?.kind === 'pond' ? sel.id : null
         if (id !== input.selectedId) input.select(id)
       }
       changed.current = true

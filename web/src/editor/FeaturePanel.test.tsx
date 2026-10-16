@@ -43,7 +43,7 @@ describe('FeaturePanel', () => {
     act(() => {
       state().terrain.commitFeatures({ splines: [road], ponds: [], caves: [] })
       state().setTool('path')
-      state().setSelection({ kind: 'spline', id: 'a' })
+      state().setSelection({ kind: 'spline', id: 'a', point: null })
     })
     render(<FeaturePanel />)
     const width = screen.getByRole('spinbutton', { name: 'Width' })
@@ -63,7 +63,7 @@ describe('FeaturePanel', () => {
     act(() => {
       state().terrain.commitFeatures({ splines: [road, { ...road, id: 'r', kind: 'river', width: 3 }], ponds: [], caves: [] })
       state().setTool('path')
-      state().setSelection({ kind: 'spline', id: 'a' })
+      state().setSelection({ kind: 'spline', id: 'a', point: null })
     })
     const { unmount } = render(<FeaturePanel />)
     await userEvent.click(screen.getByRole('radio', { name: 'Cobble' }))
@@ -71,7 +71,7 @@ describe('FeaturePanel', () => {
     unmount()
     act(() => {
       state().setTool('river')
-      state().setSelection({ kind: 'spline', id: 'r' })
+      state().setSelection({ kind: 'spline', id: 'r', point: null })
     })
     render(<FeaturePanel />)
     expect(screen.queryByRole('radiogroup', { name: 'Style' })).toBeNull()
@@ -191,5 +191,40 @@ describe('Cave panel', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Delete' }))
     expect(state().terrain.features.caves).toEqual([])
     expect(state().selection).toBeNull()
+  })
+})
+
+describe('FeaturePanel point size', () => {
+  it('sets the selected spline point width and the selected cave point radius', () => {
+    act(() => {
+      state().terrain.commitFeatures({
+        splines: [road],
+        ponds: [],
+        caves: [{ id: 'k', radius: 2, points: [{ x: 0, y: 0, z: 0, chamber: 0 }, { x: 5, y: 0, z: 0, chamber: 0 }] }],
+      })
+      state().setTool('path')
+      state().setSelection({ kind: 'spline', id: 'a', point: 1 })
+    })
+    const { unmount } = render(<FeaturePanel />)
+    const width = screen.getByRole('spinbutton', { name: 'Point width' })
+    expect(width).toHaveValue(2)
+    act(() => {
+      fireEvent.change(width, { target: { value: '5' } })
+    })
+    expect(state().terrain.features.splines[0].points[1].width).toBe(5)
+    expect(state().terrain.features.splines[0].points[0].width).toBeUndefined()
+    unmount()
+
+    act(() => {
+      state().setTool('cave')
+      state().setSelection({ kind: 'cave', id: 'k', point: 0 })
+    })
+    render(<FeaturePanel />)
+    const radius = screen.getByRole('spinbutton', { name: 'Point radius' })
+    expect(radius).toHaveValue(2)
+    act(() => {
+      fireEvent.change(radius, { target: { value: '3' } })
+    })
+    expect(state().terrain.features.caves[0].points[0].radius).toBe(3)
   })
 })

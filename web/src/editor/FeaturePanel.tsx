@@ -3,6 +3,7 @@ import { clampWidth, FEATURES, widthRange, type PathStyle, type Pond, type Splin
 import { MAX_HEIGHT, MIN_HEIGHT } from '../terrain/layers'
 import { editCave, editCavePoint } from '../tools/caveInput'
 import { levelRange } from '../tools/pondInput'
+import { editSplinePoint } from '../tools/splineInput'
 import { useEditorStore } from './editorStore'
 
 const STYLES: { id: PathStyle; label: string }[] = [
@@ -12,8 +13,8 @@ const STYLES: { id: PathStyle; label: string }[] = [
 
 const POND_HINT = 'Click to make a pond and drag up or down to set its level. Click a pond to select it.'
 const CAVE_HINT =
-  'Click the ground for the entrance, then click to add points at the same depth; double-click or Enter to finish. Click a point to select it and drag it; its height and chamber are below.'
-const HINT = 'Click to add points; double-click or Enter to finish. Click a spline to select it, drag its points, Alt-click to add one.'
+  'Click the ground for the entrance, then click to add points at the same depth; double-click or Enter to finish. Click a point to select it and drag it; its height, radius and chamber are below; [ and ] scale its radius.'
+const HINT = 'Click to add points; double-click or Enter to finish. Click a spline to select it, drag its points, Alt-click to add one. [ and ] scale a selected point width.'
 
 /**
  * Context panel for the Path, River, Water and Cave tools: style for new paths, the selected spline's width and style,
@@ -35,6 +36,7 @@ export function FeaturePanel() {
     if (!spline) return
     terrain.commitFeatures({ ...f, splines: f.splines.map((s) => (s.id === spline.id ? { ...s, ...change } : s)) })
   }
+  const pointIndex = selection?.kind === 'spline' ? selection.point : null
   const style = spline?.kind === 'path' ? spline.style : pathStyle
 
   return (
@@ -58,6 +60,14 @@ export function FeaturePanel() {
         </div>
       )}
       {spline && <WidthField spline={spline} onCommit={(width) => edit({ width })} />}
+      {spline && pointIndex !== null && spline.points[pointIndex] && (
+        <NumberField
+          label="Point width"
+          value={spline.points[pointIndex].width ?? spline.width}
+          range={widthRange(spline.kind)}
+          onCommit={(width) => terrain.commitFeatures(editSplinePoint(terrain.features, spline.id, pointIndex, { width }))}
+        />
+      )}
       <p className="panel-hint">{HINT}</p>
     </div>
   )
@@ -197,6 +207,12 @@ function CavePanel() {
                 value={point.y}
                 range={[MIN_HEIGHT, MAX_HEIGHT]}
                 onCommit={(y) => terrain.commitFeatures(editCavePoint(terrain.features, cave.id, index, { y }))}
+              />
+              <NumberField
+                label="Point radius"
+                value={point.radius ?? cave.radius}
+                range={[radius.min, radius.max]}
+                onCommit={(r) => terrain.commitFeatures(editCavePoint(terrain.features, cave.id, index, { radius: r }))}
               />
               <label className="choice">
                 <input

@@ -142,3 +142,17 @@ describe('splineBounds', () => {
     expect(splineBounds(sm, 1)).toEqual({ x0: -5, z0: 1, x1: 7, z1: 3 })
   })
 })
+
+describe('sampleSpline widths', () => {
+  it('interpolates per-point widths along the arc, falling back to the given width', () => {
+    const pts: SplinePoint[] = [{ x: 0, z: 0 }, { x: 10, z: 0, width: 6 }, { x: 20, z: 0 }]
+    const sm = sampleSpline(pts, 0.5, 2)
+    expect(sm.widths[0]).toBe(2)
+    expect(sm.widths[sm.widths.length - 1]).toBe(2)
+    const mid = Array.from(sm.xs).findIndex((x) => Math.abs(x - 10) < 1e-4)
+    expect(sm.widths[mid]).toBeCloseTo(6)
+    const quarter = Array.from(sm.xs).findIndex((x) => Math.abs(x - 5) < 0.3)
+    expect(sm.widths[quarter]).toBeGreaterThan(2)
+    expect(sm.widths[quarter]).toBeLessThan(6)
+  })
+})

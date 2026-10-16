@@ -255,3 +255,15 @@ describe('exclusionRect', () => {
     expect(out[4]).toBe(1)
   })
 })
+
+describe('per-point width', () => {
+  it('carves a wider path around a point with a larger width', () => {
+    const base = createFlatLayers(SIZE).heights
+    const pts = (w?: number): SplinePoint[] => [{ x: -20, z: 0 }, { x: 0, z: 0, width: w }, { x: 20, z: 0 }]
+    const plain = carve(base, [spline('path', pts())])
+    const wide = carve(base, [spline('path', pts(10))])
+    expect(plain.surface.kind[idx(0, 3)]).not.toBe(SURFACE.dirt)
+    expect(wide.surface.kind[idx(0, 3)]).toBe(SURFACE.dirt)
+    expect(wide.surface.kind[idx(-20, 3)]).not.toBe(SURFACE.dirt)
+  })
+})

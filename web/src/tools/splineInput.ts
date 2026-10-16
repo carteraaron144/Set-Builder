@@ -1,4 +1,5 @@
 import {
+  clampWidth,
   defaultWidth,
   FEATURE_LIMITS,
   type Features,
@@ -94,9 +95,9 @@ export class SplineInput {
     return this.hoveredArrow
   }
 
-  select(id: string | null): void {
+  select(id: string | null, point: number | null = null): void {
     this.selected = id
-    this.point = null
+    this.point = id === null ? null : point
     this.hovered = null
     this.hoveredArrow = null
   }
@@ -278,7 +279,7 @@ export class SplineInput {
     const i = drag.index
     const isEnd = i === 0 || i === sel.points.length - 1
     const moved = isEnd ? snapToEnd(p, this.getFeatures().splines, this.kind, sel.id) : p
-    const next = this.replace(sel.id, (s) => ({ ...s, points: s.points.map((q, k) => (k === i ? moved : q)) }))
+    const next = this.replace(sel.id, (s) => ({ ...s, points: s.points.map((q, k) => (k === i ? { ...q, x: moved.x, z: moved.z } : q)) }))
     drag.moved = next
     return { preview: next }
   }
@@ -326,4 +327,15 @@ export class SplineInput {
     const h = this.half
     return { x: Math.min(h, Math.max(-h, p.x)), z: Math.min(h, Math.max(-h, p.z)) }
   }
+}
+
+/** Edits point `index` of spline `id`, clamping its width; `f` itself if there's no such point. */
+export function editSplinePoint(f: Features, id: string, index: number, change: Partial<SplinePoint>): Features {
+  const spline = f.splines.find((s) => s.id === id)
+  if (!spline || index < 0 || index >= spline.points.length) return f
+  const edit = (p: SplinePoint): SplinePoint => {
+    const { width, ...rest } = { ...p, ...change }
+    return width === undefined ? rest : { ...rest, width: clampWidth(spline.kind, width) }
+  }
+  return { ...f, splines: f.splines.map((s) => (s.id === id ? { ...s, points: s.points.map((p, k) => (k === index ? edit(p) : p)) } : s)) }
 }

@@ -91,7 +91,7 @@ describe('editor store terrain state', () => {
   it('clears the selection when the tool changes', () => {
     const store = createEditorStore()
     store.getState().setTool('path')
-    store.getState().setSelection({ kind: 'spline', id: 'a' })
+    store.getState().setSelection({ kind: 'spline', id: 'a', point: null })
     store.getState().setTool('river')
     expect(store.getState().selection).toBeNull()
     expect(store.getState().pathStyle).toBe('dirt')
@@ -108,5 +108,32 @@ describe('editor store terrain state', () => {
     expect(terrain.features.ponds).toHaveLength(1)
     store.getState().undo()
     expect(terrain.features.ponds).toHaveLength(0)
+  })
+})
+
+describe('editor store point scaling', () => {
+  const caves = [{ id: 'k', radius: 2, points: [{ x: 0, y: 0, z: 0, chamber: 0 }, { x: 5, y: 0, z: 0, chamber: 0 }] }]
+
+  it('resizeBrush scales the selected point instead of the brush, as one undo step', () => {
+    const store = createEditorStore()
+    const s = () => store.getState()
+    s().terrain.commitFeatures({ splines: [], ponds: [], caves })
+    s().setSelection({ kind: 'cave', id: 'k', point: 1 })
+    const brush = s().brush.radius
+    s().resizeBrush(1.25)
+    expect(s().terrain.features.caves[0].points[1].radius).toBeCloseTo(2.5)
+    expect(s().brush.radius).toBe(brush)
+    s().undo()
+    expect(s().terrain.features.caves[0].points[1].radius).toBeUndefined()
+  })
+
+  it('resizeBrush scales the brush when no point is selected', () => {
+    const store = createEditorStore()
+    store.getState().terrain.commitFeatures({ splines: [], ponds: [], caves })
+    store.getState().setSelection({ kind: 'cave', id: 'k', point: null })
+    store.getState().setBrush({ radius: 10 })
+    store.getState().resizeBrush(1.25)
+    expect(store.getState().brush.radius).toBeCloseTo(12.5)
+    expect(store.getState().terrain.features.caves[0].points[1].radius).toBeUndefined()
   })
 })

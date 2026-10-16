@@ -5,6 +5,8 @@ export interface SplineSamples {
   xs: Float32Array
   zs: Float32Array
   s: Float32Array
+  /** Width at each sample: control-point widths interpolated along the arc. */
+  widths: Float32Array
   length: number
 }
 
@@ -52,15 +54,18 @@ function catmullRom(p0: SplinePoint, p1: SplinePoint, p2: SplinePoint, p3: Splin
  * Samples the curve through `points` about every `step` metres of arc length. Each segment is resampled on its
  * own, so every control point is a sample and spacing is at most `step`.
  */
-export function sampleSpline(points: SplinePoint[], step = 0.5): SplineSamples {
+export function sampleSpline(points: SplinePoint[], step = 0.5, width = 0): SplineSamples {
   const pts = dedupe(points)
   const xs: number[] = [pts[0].x]
   const zs: number[] = [pts[0].z]
   const s: number[] = [0]
+  const ws: number[] = [pts[0].width ?? width]
   const n = pts.length
   for (let k = 0; k + 1 < n; k++) {
     const p1 = pts[k]
     const p2 = pts[k + 1]
+    const w1 = p1.width ?? width
+    const w2 = p2.width ?? width
     // Phantom end points mirror the neighbour, so the curve leaves each end heading at the next point.
     const p0 = k > 0 ? pts[k - 1] : { x: 2 * p1.x - p2.x, z: 2 * p1.z - p2.z }
     const p3 = k + 2 < n ? pts[k + 2] : { x: 2 * p2.x - p1.x, z: 2 * p2.z - p1.z }
@@ -83,6 +88,7 @@ export function sampleSpline(points: SplinePoint[], step = 0.5): SplineSamples {
         xs.push(p2.x)
         zs.push(p2.z)
         s.push(base + segLength)
+        ws.push(w2)
         break
       }
       const target = (segLength * i) / parts
@@ -91,9 +97,10 @@ export function sampleSpline(points: SplinePoint[], step = 0.5): SplineSamples {
       xs.push(dx[j] + (dx[j + 1] - dx[j]) * w)
       zs.push(dz[j] + (dz[j + 1] - dz[j]) * w)
       s.push(base + target)
+      ws.push(w1 + (w2 - w1) * (i / parts))
     }
   }
-  return { xs: Float32Array.from(xs), zs: Float32Array.from(zs), s: Float32Array.from(s), length: s[s.length - 1] }
+  return { xs: Float32Array.from(xs), zs: Float32Array.from(zs), s: Float32Array.from(s), widths: Float32Array.from(ws), length: s[s.length - 1] }
 }
 
 /** The closest point of the sampled polyline to (x, z): nearest sample index, distance and arc length there. */

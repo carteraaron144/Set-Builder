@@ -8,6 +8,8 @@ export interface CaveSamples {
   xs: Float32Array
   ys: Float32Array
   zs: Float32Array
+  /** Tunnel radius at each sample: control-point radii interpolated along the curve. */
+  rs: Float32Array
 }
 
 /** World-metre box. */
@@ -50,13 +52,13 @@ function catmullRom(p0: P3, p1: P3, p2: P3, p3: P3, t: number): P3 {
 }
 
 /** Samples the curve through `points` at about `step` metres per sample; every control point is a sample. */
-export function sampleCave(points: CavePoint[], step = sampleStep): CaveSamples {
-  const pts: P3[] = []
+export function sampleCave(points: CavePoint[], step = sampleStep, radius = 0): CaveSamples {
+  const pts: (P3 & { r: number })[] = []
   for (const p of points) {
     const q = pts[pts.length - 1]
-    if (!q || Math.hypot(p.x - q.x, p.y - q.y, p.z - q.z) > 1e-6) pts.push(p)
+    if (!q || Math.hypot(p.x - q.x, p.y - q.y, p.z - q.z) > 1e-6) pts.push({ x: p.x, y: p.y, z: p.z, r: p.radius ?? radius })
   }
-  const out: P3[] = [pts[0]]
+  const out: (P3 & { r: number })[] = [pts[0]]
   const n = pts.length
   for (let k = 0; k + 1 < n; k++) {
     const p1 = pts[k]
@@ -65,13 +67,14 @@ export function sampleCave(points: CavePoint[], step = sampleStep): CaveSamples 
     const p0 = k > 0 ? pts[k - 1] : { x: 2 * p1.x - p2.x, y: 2 * p1.y - p2.y, z: 2 * p1.z - p2.z }
     const p3 = k + 2 < n ? pts[k + 2] : { x: 2 * p2.x - p1.x, y: 2 * p2.y - p1.y, z: 2 * p2.z - p1.z }
     const parts = Math.max(1, Math.ceil(Math.hypot(p2.x - p1.x, p2.y - p1.y, p2.z - p1.z) / step))
-    for (let i = 1; i < parts; i++) out.push(catmullRom(p0, p1, p2, p3, i / parts))
+    for (let i = 1; i < parts; i++) out.push({ ...catmullRom(p0, p1, p2, p3, i / parts), r: p1.r + (p2.r - p1.r) * (i / parts) })
     out.push(p2)
   }
   return {
     xs: Float32Array.from(out, (p) => p.x),
     ys: Float32Array.from(out, (p) => p.y),
     zs: Float32Array.from(out, (p) => p.z),
+    rs: Float32Array.from(out, (p) => p.r),
   }
 }
 
@@ -85,9 +88,8 @@ export function smoothMin(a: number, b: number, k: number): number {
 const BIN = 8
 
 export function profileCave(heights: Heightmap, cave: Cave): CaveProfile {
-  const samples = sampleCave(cave.points)
-  const { xs, ys, zs } = samples
-  const r = cave.radius
+  const samples = sampleCave(cave.points, sampleStep, cave.radius)
+  const { xs, ys, zs, rs } = samples
   const chambers = cave.points.filter((p) => p.chamber > 0)
 
   const bounds: Box = { x0: Infinity, y0: Infinity, z0: Infinity, x1: -Infinity, y1: -Infinity, z1: -Infinity }
@@ -99,7 +101,7 @@ export function profileCave(heights: Heightmap, cave: Cave): CaveProfile {
     bounds.y0 = Math.min(bounds.y0, y0)
     bounds.y1 = Math.max(bounds.y1, y1)
   }
-  for (let i = 0; i < xs.length; i++) grow(xs[i], zs[i], ys[i] - floorRatio * r, ys[i] + r, r)
+  for (let i = 0; i < xs.length; i++) grow(xs[i], zs[i], ys[i] - floorRatio * rs[i], ys[i] + rs[i], rs[i])
   for (const c of chambers) grow(c.x, c.z, c.y - floorRatio * c.chamber, c.y + c.chamber, c.chamber)
 
   // Bin each segment (and chamber) into every ground cell its box, grown by the margin, touches. Outside the
@@ -113,9 +115,11 @@ export function profileCave(heights: Heightmap, cave: Cave): CaveProfile {
     for (let cz = cell(z0 - margin); cz <= cell(z1 + margin); cz++)
       for (let cx = cell(x0 - margin); cx <= cell(x1 + margin); cx++) bins[cz * cells + cx].push(id)
   }
-  for (let s = 0; s + 1 < xs.length; s++)
+  for (let s = 0; s + 1 < xs.length; s++) {
+    const r = Math.max(rs[s], rs[s + 1])
     binBox(segBins, s, Math.min(xs[s], xs[s + 1]) - r, Math.min(zs[s], zs[s + 1]) - r, Math.max(xs[s], xs[s + 1]) + r, Math.max(zs[s], zs[s + 1]) + r)
-  if (xs.length === 1) binBox(segBins, -1, xs[0] - r, zs[0] - r, xs[0] + r, zs[0] + r)
+  }
+  if (xs.length === 1) binBox(segBins, -1, xs[0] - rs[0], zs[0] - rs[0], xs[0] + rs[0], zs[0] + rs[0])
   chambers.forEach((c, i) => binBox(chamberBins, i, c.x - c.chamber, c.z - c.chamber, c.x + c.chamber, c.z + c.chamber))
 
   const point = (x: number, y: number, z: number, px: number, py: number, pz: number, rad: number) =>
@@ -127,7 +131,7 @@ export function profileCave(heights: Heightmap, cave: Cave): CaveProfile {
     let d = Infinity
     for (const s of segBins[b]) {
       if (s < 0) {
-        d = Math.min(d, point(x, y, z, xs[0], ys[0], zs[0], r))
+        d = Math.min(d, point(x, y, z, xs[0], ys[0], zs[0], rs[0]))
         continue
       }
       // Closest point on the segment, then the clipped capsule there.
@@ -139,7 +143,7 @@ export function profileCave(heights: Heightmap, cave: Cave): CaveProfile {
       const bz = zs[s + 1] - az
       const len2 = bx * bx + by * by + bz * bz
       const t = len2 > 0 ? Math.min(1, Math.max(0, ((x - ax) * bx + (y - ay) * by + (z - az) * bz) / len2)) : 0
-      d = Math.min(d, point(x, y, z, ax + bx * t, ay + by * t, az + bz * t, r))
+      d = Math.min(d, point(x, y, z, ax + bx * t, ay + by * t, az + bz * t, rs[s] + (rs[s + 1] - rs[s]) * t))
     }
     for (const i of chamberBins[b]) {
       const c = chambers[i]

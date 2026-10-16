@@ -34,7 +34,6 @@ export function buildWater(ground: Ground): WaterGeometry[] {
 function riverRibbon(p: SplineProfile): Omit<WaterGeometry, 'name'> {
   const { xs, zs } = p.samples
   const n = xs.length
-  const hw = p.spline.width / 2
   const positions = new Float32Array(n * 6)
   let tx = 1
   let tz = 0
@@ -49,6 +48,7 @@ function riverRibbon(p: SplineProfile): Omit<WaterGeometry, 'name'> {
     }
     // (tz, −tx) is to the right of the flow; this order makes the triangles below face up.
     const y = p.water![k]
+    const hw = p.samples.widths[k] / 2
     positions.set([xs[k] - tz * hw, y, zs[k] + tx * hw, xs[k] + tz * hw, y, zs[k] - tx * hw], k * 6)
   }
   const indices = new Uint32Array((n - 1) * 6)
