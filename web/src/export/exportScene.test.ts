@@ -177,3 +177,31 @@ describe('buildExportScene with features', () => {
   })
 })
 
+
+describe('buildExportScene with caves', () => {
+  const features: Features = {
+    splines: [],
+    ponds: [],
+    caves: [{ id: 'c', radius: 2, points: [{ x: -25, y: -3, z: -20, chamber: 0 }, { x: -10, y: -3, z: -20, chamber: 5 }] }],
+  }
+
+  it('exports an SDF chunk under its node name with its render mesh as -col; other chunks as before', () => {
+    const ground = new Ground(cloneLayers(layers), features)
+    expect(ground.isSdfChunk(0)).toBe(true)
+    const root = buildExportScene({ scene, layers, ground, instancesByRule, rules, library }, EXPORT_DEFAULTS)
+    const c0 = root.getObjectByName('terrain_c0_0') as Mesh
+    const col0 = root.getObjectByName('terrain_c0_0-col') as Mesh
+    const expected = ground.chunkGeometry(0)
+    expect([...c0.geometry.getAttribute('position').array]).toEqual([...expected.positions])
+    expect([...c0.geometry.getAttribute('color').array]).toEqual([...expected.colors])
+    expect([...c0.geometry.index!.array]).toEqual([...expected.indices])
+    expect([...col0.geometry.getAttribute('position').array]).toEqual([...expected.positions])
+    expect([...col0.geometry.index!.array]).toEqual([...expected.indices])
+    const col1 = root.getObjectByName('terrain_c1_0-col') as Mesh
+    expect(col1.geometry.getAttribute('position').count).toBe(33 * 33)
+    // Grouped exports merge the SDF chunk with heightmap chunks.
+    const merged = buildExportScene({ scene, layers, ground, instancesByRule, rules, library }, { ...EXPORT_DEFAULTS, grouping: 'merged' })
+    const sceneCol = merged.getObjectByName('scene-col') as Mesh
+    expect(sceneCol.geometry.getAttribute('position').count).toBeGreaterThan(3 * 33 * 33 + expected.positions.length / 3 - 1)
+  })
+})

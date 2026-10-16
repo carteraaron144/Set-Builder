@@ -19,8 +19,7 @@ import { buildWater, WATER_MATERIAL } from '../features/water'
 import type { Scene } from '../scene/scene'
 import type { ScatterRules } from '../scatter/rules'
 import type { Instance } from '../scatter/scatter'
-import { buildChunkGeometry, CHUNK_SIZE, chunkCount } from '../terrain/chunks'
-import type { SurfaceMap } from '../features/carve'
+import { buildChunkGeometry, CHUNK_SIZE, chunkCount, type ChunkGeometry } from '../terrain/chunks'
 import type { TerrainLayers } from '../terrain/layers'
 import { DEFAULT_PALETTE } from '../terrain/palette'
 
@@ -62,11 +61,18 @@ function mergeable(g: BufferGeometry): BufferGeometry {
   return out
 }
 
-function terrainChunk(layers: TerrainLayers, chunk: number, surface?: SurfaceMap): BufferGeometry {
-  const c = buildChunkGeometry(layers, chunk, DEFAULT_PALETTE, surface)
+function terrainChunk(c: ChunkGeometry): BufferGeometry {
   const g = new BufferGeometry()
   g.setAttribute('position', new BufferAttribute(c.positions, 3))
   g.setAttribute('color', new BufferAttribute(c.colors, 3))
+  g.setIndex(new BufferAttribute(new Uint32Array(c.indices), 1))
+  return g
+}
+
+/** A chunk caves reach collides as rendered: its surface has no heightmap to thin. */
+function sdfCollision(c: ChunkGeometry): BufferGeometry {
+  const g = new BufferGeometry()
+  g.setAttribute('position', new BufferAttribute(c.positions, 3))
   g.setIndex(new BufferAttribute(new Uint32Array(c.indices), 1))
   return g
 }
@@ -127,6 +133,10 @@ export function buildExportScene(input: ExportInput, o: ExportOptions): Group {
   const { scene, instancesByRule, rules, library, ground } = input
   const layers = ground?.layers ?? input.layers
   const surface = ground?.surface
+  /** A chunk's render geometry, from the density field where caves reach. */
+  const chunkGeometry = (c: number) => (ground ? ground.chunkGeometry(c, DEFAULT_PALETTE) : buildChunkGeometry(layers, c, DEFAULT_PALETTE, surface))
+  const chunkCollision = (c: number, render?: ChunkGeometry) =>
+    ground?.isSdfChunk(c) ? sdfCollision(render ?? chunkGeometry(c)) : terrainCollision(layers, c)
   const water = ground ? waterMeshes(ground) : []
   const size = layers.heights.size
   const n = chunkCount(size)
@@ -176,8 +186,11 @@ export function buildExportScene(input: ExportInput, o: ExportOptions): Group {
 
   if (o.grouping === 'element') {
     for (let c = 0; c < n * n; c++) {
-      terrain.add(named(new Mesh(terrainChunk(layers, c, surface), terrainMat), `terrain_c${chunkName(c, n)}`))
-      if (o.collision) terrain.add(named(new Mesh(terrainCollision(layers, c), collisionMat), `terrain_c${chunkName(c, n)}-col`))
+      const geometry = chunkGeometry(c)
+      terrain.add(named(new Mesh(terrainChunk(geometry), terrainMat), `terrain_c${chunkName(c, n)}`))
+      if (o.collision) {
+        terrain.add(named(new Mesh(chunkCollision(c, geometry), collisionMat), `terrain_c${chunkName(c, n)}-col`))
+      }
     }
     const shared = new Map<LoadedAsset, { parts: { slot: string; geometry: BufferGeometry }[]; col: BufferGeometry | null }>()
     for (const e of elements) {
@@ -220,14 +233,14 @@ export function buildExportScene(input: ExportInput, o: ExportOptions): Group {
       const col = o.collision ? collisionShape(e.asset) : null
       if (col) cols.push(col.applyMatrix4(m))
     }
-    const terrainGeom = mergeGeometries(chunks.map((c) => terrainChunk(layers, c, surface)))!
+    const terrainGeom = mergeGeometries(chunks.map((c) => terrainChunk(chunkGeometry(c))))!
     const parts = [terrainGeom, ...[...bySlot.values()].map((gs) => mergeGeometries(gs)!)]
     const materials = [terrainMat, ...[...bySlot.keys()].map(materialFor)]
     const name = o.grouping === 'chunk' ? `chunk_${chunkName(chunks[0], n)}` : 'scene'
     const target = root
     target.add(named(new Mesh(mergeGeometries(parts, true)!, materials), name))
     if (o.collision) {
-      const all = [...chunks.map((c) => terrainCollision(layers, c)), ...cols.map((g) => (g.index ? g : g.setIndex(Array.from({ length: g.getAttribute('position').count }, (_, i) => i))))]
+      const all = [...chunks.map((c) => chunkCollision(c)), ...cols.map((g) => (g.index ? g : g.setIndex(Array.from({ length: g.getAttribute('position').count }, (_, i) => i))))]
       target.add(named(new Mesh(mergeGeometries(all)!, collisionMat), `${name}-col`))
     }
   }
