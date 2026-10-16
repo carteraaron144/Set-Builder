@@ -10,7 +10,7 @@ interface Chunk {
   geometry: BufferGeometry
 }
 
-/** One flat-shaded mesh per 32 m chunk; dirty chunks are refreshed in place, at most once per frame. */
+/** One flat-shaded mesh per 32 m chunk of the carved ground; dirty chunks are refreshed in place, at most once per frame. */
 export function TerrainMesh({ terrain }: { terrain: TerrainEditor }) {
   const material = useMemo(() => new MeshStandardMaterial({ vertexColors: true, flatShading: true }), [])
   useEffect(() => () => material.dispose(), [material])
@@ -19,8 +19,9 @@ export function TerrainMesh({ terrain }: { terrain: TerrainEditor }) {
     // A fresh build covers everything, so drop changes queued before it.
     terrain.takeDirtyChunks('mesh')
     const n = chunkCount(terrain.layers.heights.size)
+    const { layers, surface } = terrain.ground
     return Array.from({ length: n * n }, (_, i) => {
-      const data = buildChunkGeometry(terrain.layers, i, DEFAULT_PALETTE)
+      const data = buildChunkGeometry(layers, i, DEFAULT_PALETTE, surface)
       const geometry = new BufferGeometry()
       geometry.setAttribute('position', new BufferAttribute(data.positions, 3).setUsage(DynamicDrawUsage))
       geometry.setAttribute('color', new BufferAttribute(data.colors, 3).setUsage(DynamicDrawUsage))
@@ -35,7 +36,7 @@ export function TerrainMesh({ terrain }: { terrain: TerrainEditor }) {
     for (const i of terrain.takeDirtyChunks('mesh')) {
       const c = chunks[i]
       if (!c) continue
-      updateChunkGeometry(terrain.layers, i, DEFAULT_PALETTE, c.data)
+      updateChunkGeometry(terrain.ground.layers, i, DEFAULT_PALETTE, c.data, terrain.ground.surface)
       c.geometry.getAttribute('position').needsUpdate = true
       c.geometry.getAttribute('color').needsUpdate = true
       c.geometry.computeBoundingSphere()

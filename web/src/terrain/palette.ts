@@ -1,3 +1,4 @@
+import features from '../features/features.json'
 import data from './biomes.json'
 import { BIOME_IDS } from './layers'
 
@@ -15,6 +16,8 @@ export interface TerrainPalette {
   biomes: [RGB, RGB, RGB, RGB]
   earth: SlopeBand
   rock: SlopeBand
+  /** Surface colours painted over the terrain, indexed by SURFACE kind − 1: dirt, cobble, verge, bed. */
+  surface: [RGB, RGB, RGB, RGB]
 }
 
 const toLinear = (c: number) => (c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4)
@@ -36,6 +39,12 @@ export function paletteFrom(json: typeof data): TerrainPalette {
     biomes: BIOME_IDS.map((id) => hexToLinear(json.biomes[id])) as TerrainPalette['biomes'],
     earth: band(json.slopeBands.earth),
     rock: band(json.slopeBands.rock),
+    surface: [
+      features.path.styles.dirt.color,
+      features.path.styles.cobble.color,
+      features.path.verge.color,
+      features.river.bedColor,
+    ].map(hexToLinear) as TerrainPalette['surface'],
   }
 }
 

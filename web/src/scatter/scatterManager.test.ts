@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
+import { emptyFeatures, FEATURES, type Features, type Spline } from '../features/features'
 import { parsePackManifest } from '../assets/packManifest'
 import { createScene, type SceneSize } from '../scene/scene'
 import { readSceneFile, writeSceneFile } from '../scene/sceneFile'
@@ -36,8 +37,13 @@ function deferredRunner() {
 const immediate: ScatterRunner = async (req) => runRequest(req)
 const flush = () => new Promise((r) => setTimeout(r, 0))
 
-function setup(size: SceneSize = 64, run: ScatterRunner = immediate, opts: { onCapped?: (c: boolean) => void; rules?: ReturnType<typeof rulesFor> } = {}) {
-  const scene = createScene({ size, seed: 5 })
+function setup(
+  size: SceneSize = 64,
+  run: ScatterRunner = immediate,
+  opts: { onCapped?: (c: boolean) => void; rules?: ReturnType<typeof rulesFor> } = {},
+  features: Features = emptyFeatures(),
+) {
+  const scene = { ...createScene({ size, seed: 5 }), features }
   const layers = createFlatLayers(size)
   for (let o = 0; o < layers.biomes.data.length; o += 4) layers.biomes.data.set([0, 255, 0, 0], o)
   const terrain = new TerrainEditor(layers, scene.seed, scene.features, () => {})
@@ -177,5 +183,64 @@ describe('ScatterManager failures', () => {
     expect(manager.instancesByRule()).toEqual(fresh.manager.instancesByRule())
     expect(manager.instancesByRule().flat().length).toBeGreaterThan(0)
     warn.mockRestore()
+  })
+})
+
+describe('ScatterManager on carved ground', () => {
+  const diagonal: Spline = {
+    id: 'a',
+    kind: 'path',
+    style: 'dirt',
+    width: 2,
+    points: [{ x: -24, z: -20 }, { x: 0, z: 3 }, { x: 24, z: 22 }],
+  }
+  const corner: Spline = { ...diagonal, points: [{ x: -60, z: -50 }, { x: -40, z: -52 }] }
+
+  /** Distance from (x, z) to the polyline through the spline's sampled points. */
+  function distanceTo(t: TerrainEditor, x: number, z: number): number {
+    const { xs, zs } = t.ground.profiles[0].samples
+    let best = Infinity
+    for (let k = 0; k + 1 < xs.length; k++) {
+      const ex = xs[k + 1] - xs[k]
+      const ez = zs[k + 1] - zs[k]
+      const len2 = ex * ex + ez * ez
+      const u = len2 > 0 ? Math.min(1, Math.max(0, ((x - xs[k]) * ex + (z - zs[k]) * ez) / len2)) : 0
+      best = Math.min(best, Math.hypot(x - xs[k] - ex * u, z - zs[k] - ez * u))
+    }
+    return best
+  }
+
+  it('sends copies of the carved heights and the exclusion', () => {
+    const d = deferredRunner()
+    const { terrain, manager } = setup(64, d.run, {}, { splines: [diagonal], ponds: [] })
+    manager.pump()
+    const req = d.calls[0].req
+    expect(req.heights).toEqual(terrain.ground.layers.heights.data)
+    expect(req.heights).not.toBe(terrain.ground.layers.heights.data)
+    expect(req.exclusion).not.toBeNull()
+    expect(req.exclusion).toEqual(terrain.ground.exclusion)
+    expect(req.exclusion).not.toBe(terrain.ground.exclusion)
+  })
+
+  it('places nothing within the path half-width plus its clear margin', async () => {
+    const { terrain, manager } = setup(64, immediate, {}, { splines: [diagonal], ponds: [] })
+    manager.pump()
+    await flush()
+    const all = manager.instancesByRule().flat()
+    expect(all.length).toBeGreaterThan(100)
+    const clear = diagonal.width / 2 + FEATURES.path.clearMargin
+    for (const i of all) expect(distanceTo(terrain, i.x, i.z)).toBeGreaterThan(clear)
+  })
+
+  it('leaves scatter away from the path as it was', async () => {
+    const plain = setup(128)
+    const pathed = setup(128, immediate, {}, { splines: [corner], ponds: [] })
+    for (const s of [plain, pathed]) {
+      s.manager.pump()
+      await flush()
+    }
+    const far = (s: typeof plain) => s.manager.instancesByRule().map((r) => r.filter((i) => i.x >= 0 || i.z >= 0))
+    expect(far(pathed)).toEqual(far(plain))
+    expect(far(plain).flat().length).toBeGreaterThan(100)
   })
 })

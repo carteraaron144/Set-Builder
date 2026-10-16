@@ -100,7 +100,8 @@ export class ScatterManager {
     if (this.inFlight || this.pending.size === 0) return
     const chunks = [...this.pending].sort((a, b) => a - b)
     this.pending.clear()
-    const { heights, biomes } = this.terrain.layers
+    const ground = this.terrain.ground
+    const { heights, biomes } = ground.layers
     const req: ScatterRequest = {
       id: this.nextId++,
       chunks,
@@ -109,7 +110,7 @@ export class ScatterManager {
       rules: this.rules,
       heights: heights.data.slice(),
       biomes: biomes.data.slice(),
-      exclusion: null,
+      exclusion: ground.exclusion?.slice() ?? null,
       assets: this.assets,
     }
     const flight = { id: req.id, chunks: new Set(chunks), dirtied: new Set<number>() }

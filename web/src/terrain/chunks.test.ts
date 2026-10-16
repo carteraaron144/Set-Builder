@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { Ground } from '../features/ground'
 import { sculpt } from './brush'
 import {
   buildChunkGeometry,
@@ -149,5 +150,32 @@ describe('chunk geometry', () => {
         for (let c = 0; c < 3; c++) expect(g.colors[k * 3 + c]).toBeCloseTo(expected[c], 5)
       }
     }
+  })
+})
+
+describe('chunk surface colours', () => {
+  const dirtPath = new Ground(createFlatLayers(64), {
+    splines: [{ id: 'a', kind: 'path', style: 'dirt', width: 2, points: [{ x: -20, z: 0 }, { x: 20, z: 0 }] }],
+    ponds: [],
+  })
+
+  it('colours a dirt path centreline with the dirt colour', () => {
+    // Chunk 3 starts at (0, 0), on the centreline.
+    const g = buildChunkGeometry(dirtPath.layers, 3, DEFAULT_PALETTE, dirtPath.surface)
+    expectRGB(colour(g.colors, 0, 0), DEFAULT_PALETTE.surface[0])
+    expectRGB(colour(g.colors, 0, 40), DEFAULT_PALETTE.biomes[0])
+  })
+
+  it('colours the verge beside the path and leaves vertices outside it alone', () => {
+    const g = buildChunkGeometry(dirtPath.layers, 3, DEFAULT_PALETTE, dirtPath.surface)
+    // 1.5 m off the centreline: past the 1 m half-width, inside the 0.75 m verge.
+    expectRGB(colour(g.colors, 0, 3), DEFAULT_PALETTE.surface[2])
+    expectRGB(colour(g.colors, 0, 5), DEFAULT_PALETTE.biomes[0])
+  })
+
+  it('updates surface colours in place to match a fresh build', () => {
+    const g = buildChunkGeometry(createFlatLayers(64), 3, DEFAULT_PALETTE)
+    updateChunkGeometry(dirtPath.layers, 3, DEFAULT_PALETTE, g, dirtPath.surface)
+    expect(g.colors).toEqual(buildChunkGeometry(dirtPath.layers, 3, DEFAULT_PALETTE, dirtPath.surface).colors)
   })
 })

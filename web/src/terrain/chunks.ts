@@ -1,3 +1,4 @@
+import type { SurfaceMap } from '../features/carve'
 import type { SceneSize } from '../scene/scene'
 import { HEIGHT_SPACING, type Rect, type TerrainLayers } from './layers'
 import type { TerrainPalette } from './palette'
@@ -60,18 +61,21 @@ const smoothstep = (edge0: number, edge1: number, x: number) => {
   return t * t * (3 - 2 * t)
 }
 
-export function buildChunkGeometry(l: TerrainLayers, chunk: number, p: TerrainPalette): ChunkGeometry {
+export function buildChunkGeometry(l: TerrainLayers, chunk: number, p: TerrainPalette, surface?: SurfaceMap): ChunkGeometry {
   const g = {
     positions: new Float32Array(CHUNK_VERTS * CHUNK_VERTS * 3),
     colors: new Float32Array(CHUNK_VERTS * CHUNK_VERTS * 3),
     indices: buildIndices(),
   }
-  updateChunkGeometry(l, chunk, p, g)
+  updateChunkGeometry(l, chunk, p, g, surface)
   return g
 }
 
-/** Rewrites positions and colours for a chunk in place (the index buffer never changes). */
-export function updateChunkGeometry(l: TerrainLayers, chunk: number, p: TerrainPalette, g: ChunkGeometry): void {
+/**
+ * Rewrites positions and colours for a chunk in place (the index buffer never changes). With a surface map, each
+ * vertex colour is blended towards its surface colour by weight/255.
+ */
+export function updateChunkGeometry(l: TerrainLayers, chunk: number, p: TerrainPalette, g: ChunkGeometry, surface?: SurfaceMap): void {
   const { heights, biomes } = l
   const res = heights.resolution
   const h = heights.data
@@ -124,10 +128,13 @@ export function updateChunkGeometry(l: TerrainLayers, chunk: number, p: TerrainP
       const w1 = (b[o00 + 1] * c00 + b[o10 + 1] * c10 + b[o01 + 1] * c01 + b[o11 + 1] * c11) / 255
       const w2 = (b[o00 + 2] * c00 + b[o10 + 2] * c10 + b[o01 + 2] * c01 + b[o11 + 2] * c11) / 255
       const w3 = (b[o00 + 3] * c00 + b[o10 + 3] * c10 + b[o01 + 3] * c01 + b[o11 + 3] * c11) / 255
+      const sw = surface ? surface.weight[j * res + i] / 255 : 0
+      const sc = sw > 0 ? p.surface[surface!.kind[j * res + i] - 1] : null
       for (let c = 0; c < 3; c++) {
         const biome = w0 * pb[0][c] + w1 * pb[1][c] + w2 * pb[2][c] + w3 * pb[3][c]
         const ground = biome + (p.earth.color[c] - biome) * earth
-        g.colors[k + c] = ground + (p.rock.color[c] - ground) * rock
+        const terrain = ground + (p.rock.color[c] - ground) * rock
+        g.colors[k + c] = sc ? terrain + (sc[c] - terrain) * sw : terrain
       }
     }
   }
