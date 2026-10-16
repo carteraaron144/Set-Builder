@@ -81,3 +81,45 @@ describe('FeaturePanel', () => {
     expect(state().terrain.features.splines[1].width).toBe(1)
   })
 })
+
+describe('FeaturePanel for ponds', () => {
+  const select = (level: number) =>
+    act(() => {
+      state().terrain.commitFeatures({ splines: [], ponds: [{ id: 'p', seed: { x: 0, z: 0 }, level }] })
+      state().setTool('water')
+      state().setSelection({ kind: 'pond', id: 'p' })
+    })
+
+  it('spans the level slider over the ground height ± 10 m and commits once', () => {
+    select(1)
+    render(<FeaturePanel />)
+    const level = screen.getByRole('slider', { name: 'Level' })
+    expect(level).toHaveAttribute('min', '-10')
+    expect(level).toHaveAttribute('max', '10')
+    act(() => {
+      fireEvent.change(level, { target: { value: '-2' } })
+    })
+    expect(state().terrain.features.ponds[0].level).toBe(-2)
+    act(() => state().undo())
+    expect(state().terrain.features.ponds[0].level).toBe(1)
+  })
+
+  it('says when the level is capped at the spill height', () => {
+    select(1)
+    const { unmount } = render(<FeaturePanel />)
+    // Flat ground: any water would reach the scene edge.
+    expect(screen.getByText('Capped at the spill height')).toBeInTheDocument()
+    unmount()
+    select(-1)
+    render(<FeaturePanel />)
+    expect(screen.queryByText('Capped at the spill height')).toBeNull()
+  })
+
+  it('deletes the selected pond', async () => {
+    select(1)
+    render(<FeaturePanel />)
+    await userEvent.click(screen.getByRole('button', { name: 'Delete' }))
+    expect(state().terrain.features.ponds).toEqual([])
+    expect(state().selection).toBeNull()
+  })
+})

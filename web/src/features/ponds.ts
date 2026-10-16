@@ -65,11 +65,12 @@ class SampleHeap {
   }
 }
 
-const seedIndex = (h: Heightmap, pond: Pond) => {
+/** The index of the height sample nearest a point, clamped into the grid. */
+export const sampleIndex = (h: Heightmap, p: { x: number; z: number }) => {
   const res = h.resolution
   const half = h.size / 2
   const clamp = (v: number) => Math.min(res - 1, Math.max(0, Math.round((v + half) / HEIGHT_SPACING)))
-  return clamp(pond.seed.z) * res + clamp(pond.seed.x)
+  return clamp(p.z) * res + clamp(p.x)
 }
 
 /**
@@ -106,7 +107,7 @@ function spillHeight(h: Heightmap, seed: number, limit: number): number {
 export function floodPond(h: Heightmap, pond: Pond): PondFill {
   const res = h.resolution
   const mask = new Uint8Array(res * res)
-  const seed = seedIndex(h, pond)
+  const seed = sampleIndex(h, pond.seed)
   const spill = spillHeight(h, seed, pond.level)
   const capped = spill < pond.level
   const level = capped ? spill - FEATURES.pond.spillGap : pond.level

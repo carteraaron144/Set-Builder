@@ -20,6 +20,7 @@ import { heightAt } from '../terrain/layers'
 import { raycastTerrain } from '../terrain/pick'
 import type { Scene } from '../scene/scene'
 import type { TerrainEditor } from '../terrain/terrainEditor'
+import { PondInput } from '../tools/pondInput'
 import { SplineInput, type SplineResult } from '../tools/splineInput'
 
 const MAX_HANDLES = 400
@@ -49,19 +50,20 @@ function createLine(): Line {
 }
 
 /**
- * Wires clicks on the carved ground to the Path and River tools: drawing, selecting and dragging points, with
- * handles drawn as spheres and the draft as a line.
+ * Wires clicks on the carved ground to the Path, River and Water tools: drawing, selecting and dragging spline
+ * points or pond levels, with handles drawn as spheres and the draft as a line.
  */
 export function FeatureRig({ terrain, scene }: { terrain: TerrainEditor; scene: Scene }) {
   const camera = useThree((s) => s.camera)
   const element = useThree((s) => s.gl.domElement) as HTMLCanvasElement
   const tool = useEditorStore((s) => s.tool)
-  const kind = tool === 'path' || tool === 'river' ? tool : null
+  const kind = tool === 'path' || tool === 'river' || tool === 'water' ? tool : null
   const [handles] = useState(createHandles)
   const [line] = useState(createLine)
-  const inputRef = useRef<SplineInput | null>(null)
+  const inputRef = useRef<SplineInput | PondInput | null>(null)
   const hover = useRef<SplinePoint | null>(null)
   const pendingDrag = useRef<SplinePoint | null>(null)
+  const pendingY = useRef<number | null>(null)
   const changed = useRef(true)
 
   useEffect(
@@ -78,7 +80,16 @@ export function FeatureRig({ terrain, scene }: { terrain: TerrainEditor; scene: 
     changed.current = true
     if (!kind) return
     const store = useEditorStore
-    const input = new SplineInput(kind, () => terrain.features, scene.size, () => store.getState().pathStyle)
+    const input =
+      kind === 'water'
+        ? new PondInput(
+            () => terrain.features,
+            () => terrain.ground.layers.heights,
+            () => terrain.ground.ponds,
+            scene.size,
+          )
+        : new SplineInput(kind, () => terrain.features, scene.size, () => store.getState().pathStyle)
+    const splines = input instanceof SplineInput ? input : null
     inputRef.current = input
     let dragging = false
 
@@ -99,20 +110,26 @@ export function FeatureRig({ terrain, scene }: { terrain: TerrainEditor; scene: 
       if (r.commit) terrain.commitFeatures(r.commit)
       if (r.message) store.getState().setMessage({ kind: 'info', text: r.message })
       const id = input.selectedId
+      const selKind = splines ? 'spline' : 'pond'
       const cur = store.getState().selection
-      if ((cur?.kind === 'spline' ? cur.id : null) !== id) store.getState().setSelection(id ? { kind: 'spline', id } : null)
+      if ((cur?.kind === selKind ? cur.id : null) !== id) store.getState().setSelection(id ? { kind: selKind, id } : null)
       return r
     }
     const flushDrag = () => {
       const p = pendingDrag.current
+      const y = pendingY.current
       pendingDrag.current = null
-      if (p) apply(input.pointerMove(p))
+      pendingY.current = null
+      if (p && splines) apply(splines.pointerMove(p))
+      if (y !== null && !splines) apply((input as PondInput).pointerMove(y))
     }
 
     const onPointerDown = (e: PointerEvent) => {
       if (e.button !== 0) return
       const p = pick(e)
-      if (!p || !apply(input.pointerDown(p))) return
+      if (!p) return
+      const r = splines ? splines.pointerDown(p) : (input as PondInput).pointerDown(p, e.clientY)
+      if (!apply(r) || r?.message) return
       dragging = true
       try {
         element.setPointerCapture?.(e.pointerId)
@@ -122,15 +139,16 @@ export function FeatureRig({ terrain, scene }: { terrain: TerrainEditor; scene: 
     }
     const onPointerMove = (e: PointerEvent) => {
       if (dragging) {
-        pendingDrag.current = pick(e) ?? pendingDrag.current
+        if (splines) pendingDrag.current = pick(e) ?? pendingDrag.current
+        else pendingY.current = e.clientY
         return
       }
-      if (e.target !== element) return
+      if (e.target !== element || !splines) return
       const p = pick(e)
       hover.current = p
       changed.current = true
-      if (p) input.pointerMove(p)
-      element.style.cursor = input.hoveredHandle !== null ? 'pointer' : 'crosshair'
+      if (p) splines.pointerMove(p)
+      element.style.cursor = splines.hoveredHandle !== null ? 'pointer' : 'crosshair'
     }
     /** Commits a drag in progress: on release, and before undo or a tool change so no preview is left over. */
     const endDrag = () => {
@@ -141,14 +159,14 @@ export function FeatureRig({ terrain, scene }: { terrain: TerrainEditor; scene: 
     }
     const onPointerUp = endDrag
     const onClick = (e: MouseEvent) => {
-      if (e.button !== 0) return
+      if (e.button !== 0 || !splines) return
       const p = pick(e)
-      if (p) apply(input.click(p, { alt: e.altKey }))
+      if (p) apply(splines.click(p, { alt: e.altKey }))
     }
     const onDoubleClick = (e: MouseEvent) => {
       e.preventDefault()
       const p = pick(e)
-      if (p) apply(input.doubleClick(p))
+      if (p && splines) apply(splines.doubleClick(p))
     }
     const onLeave = () => {
       hover.current = null
@@ -168,7 +186,7 @@ export function FeatureRig({ terrain, scene }: { terrain: TerrainEditor; scene: 
 
     const unsubscribe = store.subscribe((s, prev) => {
       if (s.selection === prev.selection) return
-      const id = s.selection?.kind === 'spline' ? s.selection.id : null
+      const id = s.selection?.kind === (splines ? 'spline' : 'pond') ? s.selection!.id : null
       if (id !== input.selectedId) input.select(id)
       changed.current = true
     })
@@ -200,10 +218,16 @@ export function FeatureRig({ terrain, scene }: { terrain: TerrainEditor; scene: 
 
   useFrame(() => {
     const input = inputRef.current
-    if (input && pendingDrag.current) {
+    if (input instanceof SplineInput && pendingDrag.current) {
       const p = pendingDrag.current
       pendingDrag.current = null
       const r = input.pointerMove(p)
+      if (r?.preview) terrain.previewFeatures(r.preview)
+      changed.current = true
+    }
+    if (input instanceof PondInput && pendingY.current !== null) {
+      const r = input.pointerMove(pendingY.current)
+      pendingY.current = null
       if (r?.preview) terrain.previewFeatures(r.preview)
       changed.current = true
     }
@@ -212,9 +236,6 @@ export function FeatureRig({ terrain, scene }: { terrain: TerrainEditor; scene: 
     const heights = terrain.ground.layers.heights
     const y = (p: SplinePoint) => heightAt(heights, p.x, p.z) + LIFT
 
-    // Handles: the selected spline's points, then the draft's.
-    const selected = input?.selectedId ? terrain.features.splines.find((s) => s.id === input.selectedId) : undefined
-    const draft = input?.draft ?? []
     const m = new Matrix4()
     let n = 0
     const put = (p: SplinePoint, c: Color) => {
@@ -223,11 +244,26 @@ export function FeatureRig({ terrain, scene }: { terrain: TerrainEditor; scene: 
       handles.setColorAt(n, c)
       n++
     }
+    const done = () => {
+      handles.count = n
+      handles.instanceMatrix.needsUpdate = true
+      if (handles.instanceColor) handles.instanceColor.needsUpdate = true
+    }
+
+    // Ponds: every seed, so empty ponds can be found; the selected one highlighted.
+    if (input instanceof PondInput) {
+      for (const p of terrain.features.ponds) put(p.seed, p.id === input.selectedId ? HOVERED : HANDLE)
+      done()
+      line.visible = false
+      return
+    }
+
+    // Handles: the selected spline's points, then the draft's.
+    const selected = input?.selectedId ? terrain.features.splines.find((s) => s.id === input.selectedId) : undefined
+    const draft = input?.draft ?? []
     selected?.points.forEach((p, k) => put(p, k === input?.hoveredHandle ? HOVERED : HANDLE))
     draft.forEach((p) => put(p, DRAFT))
-    handles.count = n
-    handles.instanceMatrix.needsUpdate = true
-    if (handles.instanceColor) handles.instanceColor.needsUpdate = true
+    done()
 
     // The draft as a curve, with the point under the pointer as its next point.
     const pts = draft.length > 0 && hover.current ? [...draft, hover.current] : draft
