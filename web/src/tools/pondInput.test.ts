@@ -64,7 +64,7 @@ describe('PondInput', () => {
   })
 
   it('selects a pond clicked inside its water instead of making a new one', () => {
-    const { input, run, features } = setup({ splines: [], ponds: [pond('p', 0, 0, 2)] })
+    const { input, run, features } = setup({ splines: [], ponds: [pond('p', 0, 0, 2)], caves: [] })
     run(input.pointerDown({ x: 4, z: 3 }, 300))
     expect(input.selectedId).toBe('p')
     const up = run(input.pointerUp())
@@ -73,7 +73,7 @@ describe('PondInput', () => {
   })
 
   it('selects an empty pond by its seed handle', () => {
-    const { input, run, features } = setup({ splines: [], ponds: [pond('p', 20, 20, 1)] })
+    const { input, run, features } = setup({ splines: [], ponds: [pond('p', 20, 20, 1)], caves: [] })
     run(input.pointerDown({ x: 20.5, z: 20 }, 300))
     run(input.pointerUp())
     expect(input.selectedId).toBe('p')
@@ -82,7 +82,7 @@ describe('PondInput', () => {
 
   it('refuses a 51st pond with a message', () => {
     const ponds = Array.from({ length: 50 }, (_, k) => pond(`p${k}`, -30 + (k % 10) * 2, 20 + Math.floor(k / 10) * 2, 0))
-    const { input, run, features } = setup({ splines: [], ponds })
+    const { input, run, features } = setup({ splines: [], ponds, caves: [] })
     const r = run(input.pointerDown({ x: 25, z: -25 }, 300))
     expect(r?.message).toBe('A scene can have at most 50 ponds.')
     run(input.pointerUp())
@@ -90,7 +90,7 @@ describe('PondInput', () => {
   })
 
   it('deletes the selected pond and deselects on Escape', () => {
-    const { input, run, features } = setup({ splines: [], ponds: [pond('p', 0, 0, 2)] })
+    const { input, run, features } = setup({ splines: [], ponds: [pond('p', 0, 0, 2)], caves: [] })
     run(input.pointerDown({ x: 0, z: 0 }, 300))
     run(input.pointerUp())
     expect(run(input.key('Escape'))).not.toBeNull()

@@ -23,12 +23,12 @@ describe('editor store terrain state', () => {
 
   it("builds the editor with a replaced scene's features and reports them in currentScene", () => {
     const store = createEditorStore()
-    const features = { splines: [], ponds: [{ id: 'w', seed: { x: 1, z: 2 }, level: 3 }] }
+    const features = { splines: [], ponds: [{ id: 'w', seed: { x: 1, z: 2 }, level: 3 }], caves: [] }
     store.getState().replaceScene({ ...createScene({ size: 64 }), features })
     expect(store.getState().terrain.features).toEqual(features)
     expect(store.getState().canUndo).toBe(false)
-    store.getState().terrain.commitFeatures({ splines: [], ponds: [] })
-    expect(store.getState().currentScene().features).toEqual({ splines: [], ponds: [] })
+    store.getState().terrain.commitFeatures({ splines: [], ponds: [], caves: [] })
+    expect(store.getState().currentScene().features).toEqual({ splines: [], ponds: [], caves: [] })
     expect(store.getState().currentScene().id).toBe(store.getState().scene.id)
   })
 
@@ -100,7 +100,7 @@ describe('editor store terrain state', () => {
   it('cancels a feature draft on undo without touching history', () => {
     const store = createEditorStore()
     const { terrain } = store.getState()
-    terrain.commitFeatures({ splines: [], ponds: [{ id: 'p', seed: { x: 0, z: 0 }, level: 1 }] })
+    terrain.commitFeatures({ splines: [], ponds: [{ id: 'p', seed: { x: 0, z: 0 }, level: 1 }], caves: [] })
     let drafting = true
     store.getState().setFeatureKeys({ key: () => false, cancelDraft: () => (drafting ? !(drafting = false) : false) })
     store.getState().undo()

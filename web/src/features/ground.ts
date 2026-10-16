@@ -36,7 +36,7 @@ export class Ground {
   /** Bumped whenever river or pond water may have changed. */
   waterVersion = 0
   private readonly base: TerrainLayers
-  private features: Features = { splines: [], ponds: [] }
+  private features: Features = { splines: [], ponds: [], caves: [] }
   /** Scatter cleared by splines and by ponds, on the biome grid; combined into `exclusion`. */
   private readonly splineClear: Uint8Array
   private readonly pondClear: Uint8Array

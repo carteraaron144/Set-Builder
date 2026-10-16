@@ -49,7 +49,7 @@ const sceneFields = {
 const v1Schema = z.object({ formatVersion: z.literal(1), ...sceneFields })
 const v2Schema = z.object({ formatVersion: z.literal(2), generatorVersion: z.number().int().min(1), ...sceneFields })
 const v3Schema = z.object({
-  formatVersion: z.literal(SCENE_FORMAT_VERSION),
+  formatVersion: z.union([z.literal(3), z.literal(SCENE_FORMAT_VERSION)]),
   generatorVersion: z.number().int().min(1),
   ...sceneFields,
   features: z.unknown(),
@@ -83,7 +83,7 @@ export function parseScene(data: unknown): Scene {
     const v2 = v2Schema.safeParse(data)
     if (!v2.success) throw new SceneFileError('invalid-scene', v2.error.message)
     checkGenerator(v2.data.generatorVersion)
-    // Generators 2 and 3 differ only in features, which v2 scenes don't have, so they upgrade in place.
+    // Generators 2–4 differ only in features, which v2 scenes don't have, so they upgrade in place.
     return { ...v2.data, formatVersion: SCENE_FORMAT_VERSION, generatorVersion: GENERATOR_VERSION, features: emptyFeatures() }
   }
   const result = v3Schema.safeParse(data)
@@ -91,6 +91,8 @@ export function parseScene(data: unknown): Scene {
   checkGenerator(result.data.generatorVersion)
   const features = featuresSchema(result.data.size).safeParse(result.data.features)
   if (!features.success) throw new SceneFileError('invalid-scene', features.error.message)
+  // Format 3 and generator 3 differ from 4 only in caves, which v3 scenes don't have, so they upgrade in place.
+  if (result.data.formatVersion === 3) return { ...result.data, formatVersion: SCENE_FORMAT_VERSION, generatorVersion: GENERATOR_VERSION, features: features.data } as Scene
   return { ...result.data, features: features.data } as Scene
 }
 

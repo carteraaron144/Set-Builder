@@ -41,7 +41,7 @@ const vertex = (w: WaterGeometry, v: number) => [w.positions[v * 3], w.positions
 
 describe('buildWater', () => {
   it('builds a pond at its effective level, covering every flooded sample', () => {
-    const { g, water } = build({ splines: [], ponds: [pond()] })
+    const { g, water } = build({ splines: [], ponds: [pond()], caves: [] })
     expect(water.map((w) => w.name)).toEqual(['Pond 1'])
     const w = water[0]
     for (let v = 0; v < w.positions.length / 3; v++) expect(vertex(w, v)[1]).toBe(g.ponds[0].level)
@@ -59,7 +59,7 @@ describe('buildWater', () => {
   })
 
   it('builds a river ribbon of two vertices per sample, width apart around the centreline', () => {
-    const { g, water } = build({ splines: [river('r', 0)], ponds: [] })
+    const { g, water } = build({ splines: [river('r', 0)], ponds: [], caves: [] })
     const w = water[0]
     const { xs, zs } = g.profiles[0].samples
     expect(w.positions.length / 3).toBe(2 * xs.length)
@@ -75,7 +75,7 @@ describe('buildWater', () => {
   })
 
   it('keeps river water non-increasing along the flow', () => {
-    const { water } = build({ splines: [river('r', 0)], ponds: [] })
+    const { water } = build({ splines: [river('r', 0)], ponds: [], caves: [] })
     const w = water[0]
     const ys = Array.from({ length: w.positions.length / 6 }, (_, k) => vertex(w, 2 * k)[1])
     const flow = ys[ys.length - 1] <= ys[0] ? ys : ys.slice().reverse()
@@ -85,13 +85,13 @@ describe('buildWater', () => {
 
   it('names rivers then ponds in feature order and skips empty ponds', () => {
     const path: Spline = { ...river('p', 10), kind: 'path' }
-    const { water } = build({ splines: [river('a', 0), path, river('b', -8)], ponds: [pond(1.5, { x: 20, z: 20 })] })
+    const { water } = build({ splines: [river('a', 0), path, river('b', -8)], ponds: [pond(1.5, { x: 20, z: 20 })], caves: [] })
     expect(water.map((w) => w.name)).toEqual(['River 1', 'River 2'])
   })
 
   it('gives finite positions and upward-facing triangles', () => {
     const dup: Spline = { ...river('d', 4), points: [{ x: 0, z: 4 }, { x: 0, z: 4 }, { x: 10, z: 8 }, { x: 10, z: 8 }] }
-    const { water } = build({ splines: [river('a', 0, 12), dup], ponds: [pond()] })
+    const { water } = build({ splines: [river('a', 0, 12), dup], ponds: [pond()], caves: [] })
     expect(water.length).toBe(3)
     for (const w of water) {
       expect(w.positions.every(Number.isFinite)).toBe(true)

@@ -154,7 +154,7 @@ describe('uploadSceneFile errors', () => {
   it('names a newer format version', async () => {
     const { store, deps } = setup()
     const before = store.getState().scene
-    const newer = zipSync({ 'scene.json': strToU8(JSON.stringify({ ...before, formatVersion: 4 })) })
+    const newer = zipSync({ 'scene.json': strToU8(JSON.stringify({ ...before, formatVersion: 5 })) })
     await uploadSceneFile(deps, fileOf(newer))
     expect(store.getState().scene).toBe(before)
     expect(store.getState().message).toEqual({ kind: 'error', text: 'That scene was made with a newer version of Set Builder.' })
@@ -377,6 +377,7 @@ describe('features in scene actions', () => {
       },
     ],
     ponds: [{ id: 'w', seed: { x: -15, z: 15 }, level: -0.5 }],
+    caves: [],
   }
 
   function withFeatures() {

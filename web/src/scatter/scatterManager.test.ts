@@ -212,7 +212,7 @@ describe('ScatterManager on carved ground', () => {
 
   it('sends copies of the carved heights and the exclusion', () => {
     const d = deferredRunner()
-    const { terrain, manager } = setup(64, d.run, {}, { splines: [diagonal], ponds: [] })
+    const { terrain, manager } = setup(64, d.run, {}, { splines: [diagonal], ponds: [], caves: [] })
     manager.pump()
     const req = d.calls[0].req
     expect(req.heights).toEqual(terrain.ground.layers.heights.data)
@@ -223,7 +223,7 @@ describe('ScatterManager on carved ground', () => {
   })
 
   it('places nothing within the path half-width plus its clear margin', async () => {
-    const { terrain, manager } = setup(64, immediate, {}, { splines: [diagonal], ponds: [] })
+    const { terrain, manager } = setup(64, immediate, {}, { splines: [diagonal], ponds: [], caves: [] })
     manager.pump()
     await flush()
     const all = manager.instancesByRule().flat()
@@ -234,7 +234,7 @@ describe('ScatterManager on carved ground', () => {
 
   it('leaves scatter away from the path as it was', async () => {
     const plain = setup(128)
-    const pathed = setup(128, immediate, {}, { splines: [corner], ponds: [] })
+    const pathed = setup(128, immediate, {}, { splines: [corner], ponds: [], caves: [] })
     for (const s of [plain, pathed]) {
       s.manager.pump()
       await flush()

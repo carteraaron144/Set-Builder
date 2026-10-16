@@ -157,6 +157,7 @@ describe('chunk surface colours', () => {
   const dirtPath = new Ground(createFlatLayers(64), {
     splines: [{ id: 'a', kind: 'path', style: 'dirt', width: 2, points: [{ x: -20, z: 0 }, { x: 20, z: 0 }] }],
     ponds: [],
+    caves: [],
   })
 
   it('colours a dirt path centreline with the dirt colour', () => {

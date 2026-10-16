@@ -67,6 +67,7 @@ describe('SplineInput drafting', () => {
     const { input, run, features } = setup('path', {
       splines: [existing('a', 'path', [[-20, 0], [-5, 0]]), existing('r', 'river', [[10, 10], [20, 20]])],
       ponds: [],
+      caves: [],
     })
     run(input.click(P(-3.5, 1), plain))
     expect(input.draft).toEqual([P(-5, 0)])
@@ -98,7 +99,7 @@ describe('SplineInput drafting', () => {
 })
 
 describe('SplineInput selecting and editing', () => {
-  const road = () => ({ splines: [existing('a', 'path', [[-20, 0], [0, 0], [20, 0]])], ponds: [] })
+  const road = () => ({ splines: [existing('a', 'path', [[-20, 0], [0, 0], [20, 0]])], ponds: [], caves: [] })
 
   it('selects a path clicked near its body with no draft', () => {
     const { input, run } = setup('path', road())

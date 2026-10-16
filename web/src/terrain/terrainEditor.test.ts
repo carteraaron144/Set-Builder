@@ -206,7 +206,7 @@ describe('TerrainEditor features', () => {
     ],
   })
   const river: Spline = { id: 'r', kind: 'river', style: 'dirt', width: 4, points: [{ x: -20, z: -20 }, { x: 20, z: -24 }] }
-  const one = (...splines: Spline[]): Features => ({ splines, ponds: [] })
+  const one = (...splines: Spline[]): Features => ({ splines, ponds: [], caves: [] })
   const sampleAt = (x: number, z: number, size = 64) => (z + size / 2) * 2 * (size * 2 + 1) + (x + size / 2) * 2
   const sortedUnion = (...lists: number[][]) => [...new Set(lists.flat())].sort((a, b) => a - b)
 
@@ -295,7 +295,7 @@ describe('TerrainEditor features', () => {
     ed.commitFeatures(one(path(), river))
     expect(ed.waterVersion).toBeGreaterThan(v)
     v = ed.waterVersion
-    ed.commitFeatures({ splines: [path(), river], ponds: [{ id: 'p', seed: { x: 10, z: 10 }, level: 1 }] })
+    ed.commitFeatures({ splines: [path(), river], ponds: [{ id: 'p', seed: { x: 10, z: 10 }, level: 1 }], caves: [] })
     expect(ed.waterVersion).toBeGreaterThan(v)
   })
 

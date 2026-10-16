@@ -139,6 +139,7 @@ describe('buildExportScene with features', () => {
       { id: 'r', kind: 'river', style: 'dirt', width: 3, points: [{ x: -25, z: 8 }, { x: 0, z: 8 }] },
     ],
     ponds: [{ id: 'w', seed: { x: -14, z: 16 }, level: -0.1 }],
+    caves: [],
   }
   /** The shared layers with a dip for the pond. */
   const dipped = () => {

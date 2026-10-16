@@ -38,7 +38,7 @@ const path = (dz = 0, id = 'a'): Spline => ({
 })
 
 const pond = (level = 1.5): Pond => ({ id: 'p', seed: { x: -16, z: -16 }, level })
-const with_ = (splines: Spline[], ponds: Pond[] = []): Features => ({ splines, ponds })
+const with_ = (splines: Spline[], ponds: Pond[] = []): Features => ({ splines, ponds, caves: [] })
 
 describe('Ground', () => {
   it('equals the base, with no exclusion, when there are no features', () => {

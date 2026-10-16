@@ -65,16 +65,16 @@ describe('scene file', () => {
   it('opens a v1 file as flat meadow', () => {
     const { generatorVersion: _g, ...v1 } = { ...scene, formatVersion: 1 }
     const read = readSceneFile(zipWith({ 'scene.json': JSON.stringify(v1) }))
-    expect(read.scene).toEqual({ ...scene, formatVersion: 3, generatorVersion: 3 })
+    expect(read.scene).toEqual({ ...scene, formatVersion: 4, generatorVersion: 4 })
     expect(same(read.layers.heights.data, createFlatLayers(64).heights.data)).toBe(true)
     expect(same(read.layers.biomes.data, createFlatLayers(64).biomes.data)).toBe(true)
   })
 
-  it('opens a v2 scene as v3 with no features', () => {
+  it('opens a v2 scene as v4 with no features', () => {
     const { features: _f, ...rest } = scene
     for (const generatorVersion of [1, 2]) {
       const read = readSceneFile(v2Zip({ 'scene.json': JSON.stringify({ ...rest, formatVersion: 2, generatorVersion }) }))
-      expect(read.scene).toEqual({ ...scene, formatVersion: 3, generatorVersion: 3, features: { splines: [], ponds: [] } })
+      expect(read.scene).toEqual({ ...scene, formatVersion: 4, generatorVersion: 4, features: { splines: [], ponds: [], caves: [] } })
     }
   })
 
@@ -87,9 +87,19 @@ describe('scene file', () => {
           { id: 's2', kind: 'river', style: 'dirt', width: 4, points: [{ x: -30, z: -30 }, { x: 30, z: 30 }] },
         ],
         ponds: [{ id: 'w1', seed: { x: 3, z: -3 }, level: 1.25 }],
+        caves: [{ id: 'c1', radius: 2.5, points: [{ x: 4, y: 1, z: 4, chamber: 0 }, { x: 10, y: -2, z: 8, chamber: 7 }] }],
       },
     }
     expect(readSceneFile(writeSceneFile(withFeatures, shapedLayers())).scene).toEqual(withFeatures)
+  })
+
+  it('opens a v3 scene as v4 with no caves', () => {
+    const v3 = { ...scene, formatVersion: 3, generatorVersion: 3, features: { splines: [], ponds: [{ id: 'w', seed: { x: 0, z: 0 }, level: 1 }] } }
+    expect(parseScene(v3)).toEqual({ ...scene, features: { splines: [], ponds: [{ id: 'w', seed: { x: 0, z: 0 }, level: 1 }], caves: [] } })
+  })
+
+  it('reports a newer scene format', () => {
+    expect(reasonOf(() => parseScene({ ...scene, formatVersion: 5 }))).toBe('newer-version')
   })
 
   it('clamps feature widths on load', () => {
@@ -107,7 +117,7 @@ describe('scene file', () => {
   })
 
   it('reports a scene made by a newer generator instead of opening it', () => {
-    expect(reasonOf(() => readSceneFile(v2Zip({ 'scene.json': JSON.stringify({ ...scene, generatorVersion: 4 }) })))).toBe('newer-version')
+    expect(reasonOf(() => readSceneFile(v2Zip({ 'scene.json': JSON.stringify({ ...scene, generatorVersion: 5 }) })))).toBe('newer-version')
   })
 
   it('rejects bytes that are not a zip', () => {
@@ -133,8 +143,8 @@ describe('scene file', () => {
   })
 
   it('reports a newer format version before checking the shape', () => {
-    expect(reasonOf(() => parseScene({ formatVersion: 4 }))).toBe('newer-version')
-    expect(reasonOf(() => readSceneFile(v2Zip({ 'scene.json': JSON.stringify({ ...scene, formatVersion: 4 }) })))).toBe(
+    expect(reasonOf(() => parseScene({ formatVersion: 5 }))).toBe('newer-version')
+    expect(reasonOf(() => readSceneFile(v2Zip({ 'scene.json': JSON.stringify({ ...scene, formatVersion: 5 }) })))).toBe(
       'newer-version',
     )
   })

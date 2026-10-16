@@ -41,7 +41,7 @@ describe('FeaturePanel', () => {
 
   it('clamps the selected spline width to its range and commits once', () => {
     act(() => {
-      state().terrain.commitFeatures({ splines: [road], ponds: [] })
+      state().terrain.commitFeatures({ splines: [road], ponds: [], caves: [] })
       state().setTool('path')
       state().setSelection({ kind: 'spline', id: 'a' })
     })
@@ -61,7 +61,7 @@ describe('FeaturePanel', () => {
 
   it('changes the selected path style, but offers no style for rivers', async () => {
     act(() => {
-      state().terrain.commitFeatures({ splines: [road, { ...road, id: 'r', kind: 'river', width: 3 }], ponds: [] })
+      state().terrain.commitFeatures({ splines: [road, { ...road, id: 'r', kind: 'river', width: 3 }], ponds: [], caves: [] })
       state().setTool('path')
       state().setSelection({ kind: 'spline', id: 'a' })
     })
@@ -85,7 +85,7 @@ describe('FeaturePanel', () => {
 describe('FeaturePanel for ponds', () => {
   const select = (level: number) =>
     act(() => {
-      state().terrain.commitFeatures({ splines: [], ponds: [{ id: 'p', seed: { x: 0, z: 0 }, level }] })
+      state().terrain.commitFeatures({ splines: [], ponds: [{ id: 'p', seed: { x: 0, z: 0 }, level }], caves: [] })
       state().setTool('water')
       state().setSelection({ kind: 'pond', id: 'p' })
     })
