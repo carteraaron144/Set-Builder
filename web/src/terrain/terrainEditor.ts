@@ -91,6 +91,11 @@ export class TerrainEditor {
     return this.history.canRedo
   }
 
+  /** True from the start of a stroke until it ends (or is cancelled by undo and the drag finishes). */
+  get stroking(): boolean {
+    return this.stroke !== null
+  }
+
   beginStroke(tool: StrokeTool, brush: BrushSettings, at: GroundPoint | null): void {
     if (this.stroke) this.endStroke()
     this.stroke = {

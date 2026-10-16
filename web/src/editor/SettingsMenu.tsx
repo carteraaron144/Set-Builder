@@ -6,6 +6,8 @@ export function SettingsMenu() {
   const [open, setOpen] = useState(false)
   const delay = useEditorStore((s) => s.caveRemeshDelay)
   const setDelay = useEditorStore((s) => s.setCaveRemeshDelay)
+  const hideCaves = useEditorStore((s) => s.hideCavesWhileStroking)
+  const setHideCaves = useEditorStore((s) => s.setHideCavesWhileStroking)
 
   return (
     <div className="settings-menu">
@@ -28,6 +30,11 @@ export function SettingsMenu() {
             </select>
           </label>
           <p className="panel-hint">Waits this long between remeshes of terrain near caves while sculpting. Off remeshes every frame.</p>
+          <label className="settings-check">
+            <input type="checkbox" checked={hideCaves} onChange={(e) => setHideCaves(e.target.checked)} />
+            Ignore caves while sculpting
+          </label>
+          <p className="panel-hint">Draws the terrain without its caves during a stroke, then remeshes them all at once on release.</p>
         </div>
       )}
     </div>

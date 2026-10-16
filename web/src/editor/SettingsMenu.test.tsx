@@ -33,4 +33,14 @@ describe('SettingsMenu', () => {
     await userEvent.click(button)
     expect(screen.queryByLabelText('Cave remesh delay')).toBeNull()
   })
+
+  it('has a hide-caves-while-sculpting checkbox, off by default', async () => {
+    expect(useEditorStore.getState().hideCavesWhileStroking).toBe(false)
+    render(<SettingsMenu />)
+    await userEvent.click(screen.getByRole('button', { name: 'Settings' }))
+    const box = screen.getByLabelText('Ignore caves while sculpting') as HTMLInputElement
+    expect(box.checked).toBe(false)
+    await userEvent.click(box)
+    expect(useEditorStore.getState().hideCavesWhileStroking).toBe(true)
+  })
 })

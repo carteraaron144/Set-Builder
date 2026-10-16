@@ -56,6 +56,8 @@ export interface EditorState {
   scatterVisible: boolean
   /** Settings menu: how long cave chunks wait between remeshes (0 = off). */
   caveRemeshDelay: CaveRemeshDelay
+  /** Settings menu: while a stroke lasts, draw and pick the ground as if caves weren't there; they return on release. */
+  hideCavesWhileStroking: boolean
   /** The viewport's live scatter (export reads its instances); null when none is running. */
   scatterManager: ScatterManager | null
   /** Terrace step height in metres (0.5–5). */
@@ -85,6 +87,7 @@ export interface EditorState {
   setTerraceStep(m: number): void
   setScatterVisible(v: boolean): void
   setCaveRemeshDelay(ms: CaveRemeshDelay): void
+  setHideCavesWhileStroking(v: boolean): void
   setScatterManager(m: ScatterManager | null): void
   setSelection(s: Selection): void
   setPathStyle(s: PathStyle): void
@@ -123,6 +126,7 @@ const initializer =
       terraceStep: 1.5,
       scatterVisible: true,
       caveRemeshDelay: 0,
+      hideCavesWhileStroking: false,
       scatterManager: null,
       selection: null,
       pathStyle: 'dirt',
@@ -166,6 +170,7 @@ const initializer =
       setTerraceStep: (m) => set({ terraceStep: clamp(m, 0.5, 5) }),
       setScatterVisible: (scatterVisible) => set({ scatterVisible }),
       setCaveRemeshDelay: (caveRemeshDelay) => set({ caveRemeshDelay }),
+      setHideCavesWhileStroking: (hideCavesWhileStroking) => set({ hideCavesWhileStroking }),
       setScatterManager: (scatterManager) => set({ scatterManager }),
       setSelection: (selection) => set({ selection }),
       setPathStyle: (pathStyle) => set({ pathStyle }),

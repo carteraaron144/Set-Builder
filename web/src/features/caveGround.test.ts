@@ -187,4 +187,18 @@ describe('TerrainEditor with caves', () => {
     t.endStroke()
     expect(t.takeDirtyChunks('mesh')).toContain(0)
   })
+
+  it('can mesh and pick a cave chunk as plain ground', () => {
+    const g = new Ground(hill(), withCave())
+    const plain = new Ground(hill(), withCave([]))
+    expect(g.chunkGeometry(0, DEFAULT_PALETTE, true).positions).toEqual(plain.chunkGeometry(0, DEFAULT_PALETTE).positions)
+    // Along the tunnel at y = 3 from the west: ground as shown ends up inside the hill, plain ground meets the slope.
+    const origin = { x: -60, y: 3, z: -48 }
+    const east = { x: 1, y: 0, z: 0 }
+    const withCaves = g.raycast(origin, east)
+    const ignoring = g.raycast(origin, east, true)
+    expect(ignoring?.x).toBeCloseTo(plain.raycast(origin, east)?.x ?? NaN, 3)
+    expect(ignoring!.x).toBeLessThan(-51)
+    expect(withCaves!.x).toBeGreaterThan(-45)
+  })
 })

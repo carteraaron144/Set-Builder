@@ -23,7 +23,7 @@ export function BrushRig({ terrain }: { terrain: TerrainEditor }) {
       if (r.width === 0 || r.height === 0) return null
       ndc.set(((clientX - r.left) / r.width) * 2 - 1, -((clientY - r.top) / r.height) * 2 + 1)
       raycaster.setFromCamera(ndc, camera)
-      const hit = terrain.ground.raycast(raycaster.ray.origin, raycaster.ray.direction)
+      const hit = terrain.ground.raycast(raycaster.ray.origin, raycaster.ray.direction, terrain.stroking && useEditorStore.getState().hideCavesWhileStroking)
       return hit ? { x: hit.x, z: hit.z } : null
     }
     const input = new BrushInput({

@@ -38,6 +38,15 @@ describe('TerrainEditor strokes and undo', () => {
     expect(same(ed.layers.heights.data, after)).toBe(true)
   })
 
+  it('reports whether a stroke is in progress', () => {
+    const { ed } = editor()
+    expect(ed.stroking).toBe(false)
+    ed.beginStroke(raise, brush, { x: 0, z: 0 })
+    expect(ed.stroking).toBe(true)
+    ed.endStroke()
+    expect(ed.stroking).toBe(false)
+  })
+
   it('records nothing for an empty or off-scene stroke', () => {
     const { ed, onChange } = editor()
     ed.beginStroke(raise, brush, null)

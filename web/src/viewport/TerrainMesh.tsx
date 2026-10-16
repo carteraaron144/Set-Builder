@@ -2,9 +2,11 @@ import { useFrame } from '@react-three/fiber'
 import { useEffect, useMemo } from 'react'
 import { BufferAttribute, BufferGeometry, DynamicDrawUsage, MeshStandardMaterial } from 'three'
 import { chunkCount, updateChunkGeometry, type ChunkGeometry } from '../terrain/chunks'
+import type { Ground } from '../features/ground'
 import { DEFAULT_PALETTE } from '../terrain/palette'
 import type { TerrainEditor } from '../terrain/terrainEditor'
 import { useEditorStore } from '../editor/editorStore'
+import { CaveHider } from './caveHider'
 import { RemeshThrottle } from './remeshThrottle'
 
 interface Chunk {
@@ -19,6 +21,13 @@ function setBuffers(geometry: BufferGeometry, data: ChunkGeometry): void {
   geometry.setAttribute('color', new BufferAttribute(data.colors, 3).setUsage(DynamicDrawUsage))
   geometry.setIndex(new BufferAttribute(data.indices, 1))
   geometry.computeBoundingSphere()
+}
+
+function updateInPlace(ground: Ground, c: Chunk, i: number): void {
+  updateChunkGeometry(ground.layers, i, DEFAULT_PALETTE, c.data, ground.surface)
+  c.geometry.getAttribute('position').needsUpdate = true
+  c.geometry.getAttribute('color').needsUpdate = true
+  c.geometry.computeBoundingSphere()
 }
 
 /**
@@ -44,12 +53,39 @@ export function TerrainMesh({ terrain }: { terrain: TerrainEditor }) {
   useEffect(() => () => chunks.forEach((c) => c.geometry.dispose()), [chunks])
 
   const throttle = useMemo(() => new RemeshThrottle(0), [terrain])
+  const hider = useMemo(() => new CaveHider(), [terrain])
 
   useFrame(() => {
     const { ground } = terrain
+    const settings = useEditorStore.getState()
     // The settings menu picks the wait; Off (0) remeshes every frame.
-    throttle.minInterval = useEditorStore.getState().caveRemeshDelay
-    for (const i of terrain.takeDirtyChunks('mesh')) {
+    throttle.minInterval = settings.caveRemeshDelay
+    const hasCave = (i: number) => chunks[i]?.sdf || ground.isSdfChunk(i)
+    const { hide, flush, normal } = hider.split(terrain.stroking && settings.hideCavesWhileStroking, terrain.takeDirtyChunks('mesh'), hasCave)
+
+    // While a stroke ignores caves, its chunks are plain heightmap, updated in place.
+    for (const i of hide) {
+      const c = chunks[i]
+      if (!c) continue
+      if (c.sdf) {
+        c.data = ground.chunkGeometry(i, DEFAULT_PALETTE, true)
+        c.sdf = false
+        setBuffers(c.geometry, c.data)
+        continue
+      }
+      updateInPlace(ground, c, i)
+    }
+
+    // When it ends, every chunk it hid gets its caves back in the same frame.
+    for (const i of flush) {
+      const c = chunks[i]
+      if (!c) continue
+      c.data = ground.chunkGeometry(i, DEFAULT_PALETTE)
+      c.sdf = ground.isSdfChunk(i)
+      setBuffers(c.geometry, c.data)
+    }
+
+    for (const i of normal) {
       const c = chunks[i]
       if (!c) continue
       if (c.sdf || ground.isSdfChunk(i)) {
@@ -57,10 +93,7 @@ export function TerrainMesh({ terrain }: { terrain: TerrainEditor }) {
         throttle.add([i])
         continue
       }
-      updateChunkGeometry(ground.layers, i, DEFAULT_PALETTE, c.data, ground.surface)
-      c.geometry.getAttribute('position').needsUpdate = true
-      c.geometry.getAttribute('color').needsUpdate = true
-      c.geometry.computeBoundingSphere()
+      updateInPlace(ground, c, i)
     }
     const start = performance.now()
     const due = throttle.take(start)

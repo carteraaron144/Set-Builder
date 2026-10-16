@@ -153,9 +153,9 @@ export class Ground {
     return smoothMin(heightAt(this.layers.heights, x, z) - y, this.caveDistance(x, y, z), FEATURES.cave.groundBlend)
   }
 
-  /** Where a ray first meets the ground as shown, caves included, or null. */
-  raycast(origin: Vec3, dir: Vec3): Vec3 | null {
-    const density = this.caves.length > 0 ? (x: number, y: number, z: number) => this.density(x, y, z) : undefined
+  /** Where a ray first meets the ground as shown, caves included unless `ignoreCaves`, or null. */
+  raycast(origin: Vec3, dir: Vec3, ignoreCaves = false): Vec3 | null {
+    const density = this.caves.length > 0 && !ignoreCaves ? (x: number, y: number, z: number) => this.density(x, y, z) : undefined
     return raycastTerrain(this.layers.heights, origin, dir, 2000, density)
   }
 
@@ -164,9 +164,9 @@ export class Ground {
     return this.cavesOf(chunk).length > 0
   }
 
-  /** The chunk's mesh: the heightmap grid, or the density field's surface where caves reach it. */
-  chunkGeometry(chunk: number, palette: TerrainPalette = DEFAULT_PALETTE): ChunkGeometry {
-    const caves = this.cavesOf(chunk)
+  /** The chunk's mesh: the heightmap grid, or the density field's surface where caves reach it (unless `ignoreCaves`). */
+  chunkGeometry(chunk: number, palette: TerrainPalette = DEFAULT_PALETTE, ignoreCaves = false): ChunkGeometry {
+    const caves = ignoreCaves ? [] : this.cavesOf(chunk)
     if (caves.length === 0) return buildChunkGeometry(this.layers, chunk, palette, this.surface)
     return buildCaveChunk(this.layers, this.surface, caves, chunk, palette)
   }
