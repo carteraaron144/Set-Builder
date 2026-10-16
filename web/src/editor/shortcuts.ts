@@ -1,4 +1,7 @@
 import { isTextEntry } from '../dom/isTextEntry'
+import type { SplineKey } from '../tools/splineInput'
+
+const FEATURE_KEYS: readonly string[] = ['Enter', 'Escape', 'Backspace', 'Delete'] satisfies SplineKey[]
 
 export interface ShortcutHandlers {
   save(): void
@@ -6,9 +9,14 @@ export interface ShortcutHandlers {
   redo(): void
   resizeBrush(factor: number): void
   deselectTool(): void
+  /** Offers Enter, Escape, Backspace or Delete to the active feature tool; true if it used the key. */
+  featureKey(k: SplineKey): boolean
 }
 
-/** Editor keys: Ctrl/Cmd+S (works in text fields), Ctrl/Cmd+Z, Ctrl/Cmd+Shift+Z, Ctrl+Y, [ and ], Escape. */
+/**
+ * Editor keys: Ctrl/Cmd+S (works in text fields), Ctrl/Cmd+Z, Ctrl/Cmd+Shift+Z, Ctrl+Y, [ and ], and Enter,
+ * Escape, Backspace and Delete for feature tools; an unused Escape deselects the tool.
+ */
 export function installEditorShortcuts(target: Window, h: ShortcutHandlers): () => void {
   const onKeyDown = (e: KeyboardEvent) => {
     const key = e.key.toLowerCase()
@@ -30,8 +38,9 @@ export function installEditorShortcuts(target: Window, h: ShortcutHandlers): () 
       h.resizeBrush(0.8)
     } else if (!mod && !e.altKey && e.key === ']') {
       h.resizeBrush(1.25)
-    } else if (!mod && e.key === 'Escape') {
-      h.deselectTool()
+    } else if (!mod && !e.altKey && FEATURE_KEYS.includes(e.key)) {
+      if (h.featureKey(e.key as SplineKey)) e.preventDefault()
+      else if (e.key === 'Escape') h.deselectTool()
     }
   }
   target.addEventListener('keydown', onKeyDown)

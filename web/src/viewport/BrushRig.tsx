@@ -2,7 +2,7 @@ import { useFrame, useThree } from '@react-three/fiber'
 import { useEffect, useRef } from 'react'
 import { Raycaster, Vector2 } from 'three'
 import type { GroundPoint } from '../camera/overheadCamera'
-import { useEditorStore } from '../editor/editorStore'
+import { isBrushTool, useEditorStore } from '../editor/editorStore'
 import { raycastTerrain } from '../terrain/pick'
 import type { StrokeTool, TerrainEditor } from '../terrain/terrainEditor'
 import { BrushInput } from '../tools/brushInput'
@@ -29,7 +29,7 @@ export function BrushRig({ terrain }: { terrain: TerrainEditor }) {
     }
     const input = new BrushInput({
       element,
-      active: () => useEditorStore.getState().tool !== null,
+      active: () => isBrushTool(useEditorStore.getState().tool),
       pick,
       begin: (at) => {
         const s = useEditorStore.getState()

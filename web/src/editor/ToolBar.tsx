@@ -3,14 +3,15 @@ import { useEditorStore, type ToolId } from './editorStore'
 const TOOLS: { id: ToolId | null; label: string }[] = [
   { id: 'terrain', label: 'Terrain' },
   { id: 'paint', label: 'Paint' },
-  { id: null, label: 'Paths' },
+  { id: 'path', label: 'Path' },
+  { id: 'river', label: 'River' },
   { id: null, label: 'Water' },
   { id: null, label: 'Caves' },
   { id: null, label: 'Zones' },
   { id: null, label: 'Props' },
 ]
 
-/** Bottom toolbar: the brush tools (later milestones' tools shown disabled) plus Undo and Redo. */
+/** Bottom toolbar: the brush and feature tools (later ones shown disabled) plus Undo and Redo. */
 export function ToolBar() {
   const tool = useEditorStore((s) => s.tool)
   const setTool = useEditorStore((s) => s.setTool)

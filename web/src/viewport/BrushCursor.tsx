@@ -2,7 +2,7 @@ import { useFrame } from '@react-three/fiber'
 import { useEffect, useRef, useState, type RefObject } from 'react'
 import { BufferAttribute, BufferGeometry, Line, LineBasicMaterial } from 'three'
 import type { GroundPoint } from '../camera/overheadCamera'
-import { useEditorStore } from '../editor/editorStore'
+import { isBrushTool, useEditorStore } from '../editor/editorStore'
 import { heightAt } from '../terrain/layers'
 import type { TerrainEditor } from '../terrain/terrainEditor'
 
@@ -39,7 +39,7 @@ export function BrushCursor({ terrain, hover }: { terrain: TerrainEditor; hover:
     if (!line) return
     const { tool, brush } = useEditorStore.getState()
     const at = hover.current
-    line.visible = tool !== null && at !== null
+    line.visible = isBrushTool(tool) && at !== null
     if (!line.visible || !at) return
     const positions = line.geometry.getAttribute('position') as BufferAttribute
     for (let k = 0; k < POINTS; k++) {

@@ -12,7 +12,14 @@ function press(init: KeyboardEventInit, target: EventTarget = window) {
 }
 
 beforeEach(() => {
-  h = { save: vi.fn(), undo: vi.fn(), redo: vi.fn(), resizeBrush: vi.fn<(f: number) => void>(), deselectTool: vi.fn() }
+  h = {
+    save: vi.fn(),
+    undo: vi.fn(),
+    redo: vi.fn(),
+    resizeBrush: vi.fn<(f: number) => void>(),
+    deselectTool: vi.fn(),
+    featureKey: vi.fn<ShortcutHandlers['featureKey']>(() => false),
+  }
   uninstall = installEditorShortcuts(window, h)
 })
 
@@ -42,6 +49,28 @@ describe('editor shortcuts', () => {
   it('deselects the tool with Escape', () => {
     press({ key: 'Escape' })
     expect(h.deselectTool).toHaveBeenCalledTimes(1)
+  })
+
+  it('offers Enter, Escape, Backspace and Delete to the feature tool first', () => {
+    h.featureKey.mockReturnValue(true)
+    for (const key of ['Enter', 'Escape', 'Backspace', 'Delete']) expect(press({ key }).defaultPrevented).toBe(true)
+    expect(h.featureKey.mock.calls).toEqual([['Enter'], ['Escape'], ['Backspace'], ['Delete']])
+    expect(h.deselectTool).not.toHaveBeenCalled()
+  })
+
+  it('deselects the tool on an Escape the feature tool did not use, and leaves other unused keys alone', () => {
+    expect(press({ key: 'Escape' }).defaultPrevented).toBe(false)
+    expect(press({ key: 'Enter' }).defaultPrevented).toBe(false)
+    expect(h.deselectTool).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not offer feature keys from a text field or with a modifier', () => {
+    const field = document.createElement('input')
+    document.body.appendChild(field)
+    press({ key: 'Backspace' }, field)
+    press({ key: 'Delete', metaKey: true })
+    expect(h.featureKey).not.toHaveBeenCalled()
+    field.remove()
   })
 
   it('saves with Cmd+S, even in a text field', () => {
@@ -88,6 +117,7 @@ describe('editor shortcuts', () => {
       redo: () => store.getState().redo(),
       resizeBrush: () => {},
       deselectTool: () => {},
+      featureKey: () => false,
     })
     const { terrain } = store.getState()
     const before = terrain.layers.heights.data.slice()
@@ -108,7 +138,14 @@ describe('editor shortcuts', () => {
 
 describe('editor shortcuts with brush panel controls focused', () => {
   beforeEach(() => {
-    h = { save: vi.fn(), undo: vi.fn(), redo: vi.fn(), resizeBrush: vi.fn<(f: number) => void>(), deselectTool: vi.fn() }
+    h = {
+    save: vi.fn(),
+    undo: vi.fn(),
+    redo: vi.fn(),
+    resizeBrush: vi.fn<(f: number) => void>(),
+    deselectTool: vi.fn(),
+    featureKey: vi.fn<ShortcutHandlers['featureKey']>(() => false),
+  }
     uninstall = installEditorShortcuts(window, h)
   })
   afterEach(() => uninstall())

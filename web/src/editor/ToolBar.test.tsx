@@ -16,12 +16,12 @@ function strokeOnce() {
 }
 
 describe('ToolBar', () => {
-  it('lists the tools in order, with only Terrain and Paint enabled', () => {
+  it('lists the tools in order, with Terrain, Paint, Path and River enabled', () => {
     render(<ToolBar />)
     const tools = within(screen.getByRole('toolbar', { name: 'Tools' })).getAllByRole('button')
-    expect(tools.map((b) => b.textContent)).toEqual(['Terrain', 'Paint', 'Paths', 'Water', 'Caves', 'Zones', 'Props'])
-    for (const b of tools.slice(0, 2)) expect(b).toBeEnabled()
-    for (const b of tools.slice(2)) {
+    expect(tools.map((b) => b.textContent)).toEqual(['Terrain', 'Paint', 'Path', 'River', 'Water', 'Caves', 'Zones', 'Props'])
+    for (const b of tools.slice(0, 4)) expect(b).toBeEnabled()
+    for (const b of tools.slice(4)) {
       expect(b).toBeDisabled()
       expect(b).toHaveAttribute('title', 'Coming in a later milestone')
     }

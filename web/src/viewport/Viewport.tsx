@@ -5,6 +5,7 @@ import type { AssetLibrary } from '../assets/assetLibrary'
 import type { Scene } from '../scene/scene'
 import type { TerrainEditor } from '../terrain/terrainEditor'
 import { CameraRig } from './CameraRig'
+import { FeatureRig } from './FeatureRig'
 import { BrushRig } from './BrushRig'
 import { browserSupport, detectSupport, forcedBackend, type RenderBackend } from './renderBackend'
 import { ScatterMesh } from './ScatterMesh'
@@ -73,6 +74,7 @@ export function Viewport({
         <BrushRig terrain={terrain} />
         <TerrainMesh terrain={terrain} />
         <WaterMesh terrain={terrain} />
+        <FeatureRig terrain={terrain} scene={scene} />
         {library && <ScatterMesh terrain={terrain} scene={scene} library={library} />}
       </Canvas>
     </div>

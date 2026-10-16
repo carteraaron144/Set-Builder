@@ -76,4 +76,26 @@ describe('editor store terrain state', () => {
     store.getState().setTerraceStep(0.1)
     expect(store.getState().terraceStep).toBe(0.5)
   })
+
+  it('clears the selection when the tool changes', () => {
+    const store = createEditorStore()
+    store.getState().setTool('path')
+    store.getState().setSelection({ kind: 'spline', id: 'a' })
+    store.getState().setTool('river')
+    expect(store.getState().selection).toBeNull()
+    expect(store.getState().pathStyle).toBe('dirt')
+  })
+
+  it('cancels a feature draft on undo without touching history', () => {
+    const store = createEditorStore()
+    const { terrain } = store.getState()
+    terrain.commitFeatures({ splines: [], ponds: [{ id: 'p', seed: { x: 0, z: 0 }, level: 1 }] })
+    let drafting = true
+    store.getState().setFeatureKeys({ key: () => false, cancelDraft: () => (drafting ? !(drafting = false) : false) })
+    store.getState().undo()
+    expect(drafting).toBe(false)
+    expect(terrain.features.ponds).toHaveLength(1)
+    store.getState().undo()
+    expect(terrain.features.ponds).toHaveLength(0)
+  })
 })

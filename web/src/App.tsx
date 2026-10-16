@@ -17,6 +17,7 @@ import {
   uploadSceneFile,
 } from './editor/sceneActions'
 import { installEditorShortcuts } from './editor/shortcuts'
+import { FeaturePanel } from './editor/FeaturePanel'
 import { ToolBar } from './editor/ToolBar'
 import { TopBar } from './editor/TopBar'
 import { Viewport } from './viewport/Viewport'
@@ -62,6 +63,7 @@ export default function App() {
         redo: () => useEditorStore.getState().redo(),
         resizeBrush: (f) => useEditorStore.getState().resizeBrush(f),
         deselectTool: () => useEditorStore.getState().setTool(null),
+        featureKey: (k) => useEditorStore.getState().featureKeys?.key(k) ?? false,
       }),
     [deps],
   )
@@ -91,6 +93,7 @@ export default function App() {
           <Viewport scene={scene} terrain={terrain} library={library} onBackend={setRenderBackend} />
         </ViewportErrorBoundary>
         <BrushPanel />
+        <FeaturePanel />
         <ToolBar />
       </main>
       {dialog === 'new' && (

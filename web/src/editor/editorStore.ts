@@ -10,12 +10,27 @@ import {
 } from '../terrain/brush'
 import { createFlatLayers, type BiomeId, type TerrainLayers } from '../terrain/layers'
 import { TerrainEditor } from '../terrain/terrainEditor'
+import type { PathStyle } from '../features/features'
 import type { ScatterManager } from '../scatter/scatterManager'
+import type { SplineKey } from '../tools/splineInput'
 import type { RenderBackend } from '../viewport/renderBackend'
 
 export type Message = { kind: 'error' | 'info'; text: string } | null
 
-export type ToolId = 'terrain' | 'paint'
+export type ToolId = 'terrain' | 'paint' | 'path' | 'river' | 'water'
+
+/** The tools that paint with a brush. */
+export const isBrushTool = (t: ToolId | null): t is 'terrain' | 'paint' => t === 'terrain' || t === 'paint'
+
+export type Selection = { kind: 'spline' | 'pond'; id: string } | null
+
+/** The active feature tool's keyboard and undo hooks, registered by its viewport rig. */
+export interface FeatureKeys {
+  /** True if the tool used the key. */
+  key(k: SplineKey): boolean
+  /** Drops an unfinished drawing; true if there was one. */
+  cancelDraft(): boolean
+}
 
 export interface EditorState {
   scene: Scene
@@ -38,6 +53,11 @@ export interface EditorState {
   scatterManager: ScatterManager | null
   /** Terrace step height in metres (0.5–5). */
   terraceStep: number
+  /** The selected path, river or pond. */
+  selection: Selection
+  /** Style for new paths. */
+  pathStyle: PathStyle
+  featureKeys: FeatureKeys | null
   canUndo: boolean
   canRedo: boolean
   /** Shows another scene (flat layers unless given); clears dirty and history. */
@@ -56,6 +76,10 @@ export interface EditorState {
   setTerraceStep(m: number): void
   setScatterVisible(v: boolean): void
   setScatterManager(m: ScatterManager | null): void
+  setSelection(s: Selection): void
+  setPathStyle(s: PathStyle): void
+  setFeatureKeys(k: FeatureKeys | null): void
+  /** Cancels a feature draft if there is one; otherwise undoes the last entry. */
   undo(): void
   redo(): void
 }
@@ -89,6 +113,9 @@ const initializer =
       terraceStep: 1.5,
       scatterVisible: true,
       scatterManager: null,
+      selection: null,
+      pathStyle: 'dirt',
+      featureKeys: null,
       canUndo: false,
       canRedo: false,
       replaceScene: (next, layers) =>
@@ -96,6 +123,7 @@ const initializer =
           scene: next,
           terrain: terrainFor(next, layers ?? createFlatLayers(next.size)),
           dirty: false,
+          selection: null,
           canUndo: false,
           canRedo: false,
         }),
@@ -108,7 +136,7 @@ const initializer =
       markSaved: () => set({ dirty: false }),
       setRenderBackend: (renderBackend) => set({ renderBackend }),
       setMessage: (message) => set({ message }),
-      setTool: (tool) => set({ tool }),
+      setTool: (tool) => set({ tool, selection: null }),
       setTerrainMode: (terrainMode) => set({ terrainMode }),
       setBiome: (biome) => set({ biome }),
       setBrush: (p) => {
@@ -126,7 +154,11 @@ const initializer =
       setTerraceStep: (m) => set({ terraceStep: clamp(m, 0.5, 5) }),
       setScatterVisible: (scatterVisible) => set({ scatterVisible }),
       setScatterManager: (scatterManager) => set({ scatterManager }),
+      setSelection: (selection) => set({ selection }),
+      setPathStyle: (pathStyle) => set({ pathStyle }),
+      setFeatureKeys: (featureKeys) => set({ featureKeys }),
       undo: () => {
+        if (get().featureKeys?.cancelDraft()) return
         get().terrain.undo()
       },
       redo: () => {

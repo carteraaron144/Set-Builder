@@ -2,7 +2,7 @@ import type { TerrainMode } from '../terrain/brush'
 import { BRUSH_RADIUS_MAX, BRUSH_RADIUS_MIN } from '../terrain/brush'
 import { BIOME_IDS } from '../terrain/layers'
 import { BIOME_SWATCHES } from '../terrain/palette'
-import { useEditorStore } from './editorStore'
+import { isBrushTool, useEditorStore } from './editorStore'
 
 const MODES: { id: TerrainMode; label: string }[] = [
   { id: 'raise', label: 'Raise' },
@@ -25,7 +25,7 @@ export function BrushPanel() {
   const invert = useEditorStore((s) => s.invertToggle)
   const terraceStep = useEditorStore((s) => s.terraceStep)
   const { setTerrainMode, setBiome, setBrush, setInvertToggle, setTerraceStep } = useEditorStore.getState()
-  if (!tool) return null
+  if (!isBrushTool(tool)) return null
 
   return (
     <div className="brush-panel" aria-label="Brush">
