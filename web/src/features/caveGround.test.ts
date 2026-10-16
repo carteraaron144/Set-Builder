@@ -98,6 +98,62 @@ describe('Ground with caves', () => {
     expect(at(-30, 0)).toBe(0)
   })
 
+  it('rounds the rim where a chamber breaks the surface, with no folded triangles', () => {
+    // A 9 m chamber under the slope, at 8 m there: its roof (12 m) opens the slope.
+    const points = tunnel.points.map((p, k) => (k === 1 ? { ...p, chamber: 9 } : p))
+    const g = new Ground(hill(), withCave([{ ...tunnel, points }]))
+    const m = g.chunkGeometry(0)
+    const p = m.positions
+    const ix = m.indices
+    const normals: number[][] = []
+    const faces = new Map<string, number[]>()
+    for (let f = 0; f < ix.length; f += 3) {
+      const [a, b, c] = [ix[f] * 3, ix[f + 1] * 3, ix[f + 2] * 3]
+      const u = [p[b] - p[a], p[b + 1] - p[a + 1], p[b + 2] - p[a + 2]]
+      const v = [p[c] - p[a], p[c + 1] - p[a + 1], p[c + 2] - p[a + 2]]
+      const n = [u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0]]
+      normals.push(n.map((x) => x / (Math.hypot(n[0], n[1], n[2]) || 1)))
+      for (let e = 0; e < 3; e++) {
+        const [x, y] = [ix[f + e], ix[f + ((e + 1) % 3)]]
+        const key = x < y ? `${x},${y}` : `${y},${x}`
+        faces.set(key, [...(faces.get(key) ?? []), f / 3])
+      }
+    }
+    let rim = 0
+    let folds = 0
+    for (const [key, fs] of faces) {
+      if (fs.length !== 2) continue
+      const v = Number(key.split(',')[0]) * 3
+      const [x, y, z] = [p[v], p[v + 1], p[v + 2]]
+      if (Math.abs(Math.min(12, Math.max(0, (x + 56) * 0.8)) - y) > 0.6 || Math.abs(g.caveDistance(x, y, z)) > 0.6) continue
+      rim++
+      const [n1, n2] = [normals[fs[0]], normals[fs[1]]]
+      if (n1[0] * n2[0] + n1[1] * n2[1] + n1[2] * n2[2] < 0) folds++
+    }
+    expect(rim).toBeGreaterThan(100)
+    expect(folds).toBe(0)
+  })
+
+  it("keeps an SDF chunk's faces on the heightmap edge lines, so it meets its heightmap neighbours", () => {
+    // A tunnel ending just over the margin plus its radius from chunk 0's east face at x = -32, its roof 1 m under the plateau.
+    const near: Cave = { ...tunnel, points: tunnel.points.map((p) => ({ ...p, x: p.x + 1.5, y: 9 })) }
+    const g = new Ground(hill(), withCave([near]))
+    expect(g.isSdfChunk(1)).toBe(false)
+    const m = g.chunkGeometry(0)
+    const h = g.layers.heights.data
+    let checked = 0
+    for (let k = 0; k < m.positions.length; k += 3) {
+      if (m.positions[k] !== -32) continue
+      const gj = (m.positions[k + 2] + half) / HEIGHT_SPACING
+      const j0 = Math.min(Math.floor(gj), RES - 2)
+      const i = 64
+      const line = h[j0 * RES + i] + (h[(j0 + 1) * RES + i] - h[j0 * RES + i]) * (gj - j0)
+      expect(Math.abs(m.positions[k + 1] - line)).toBeLessThan(1e-4)
+      checked++
+    }
+    expect(checked).toBeGreaterThan(60)
+  })
+
   it('gives density from both the ground and the cave', () => {
     const g = new Ground(hill(), withCave())
     expect(g.density(-44, 3, -48)).toBeLessThan(0) // in the tunnel

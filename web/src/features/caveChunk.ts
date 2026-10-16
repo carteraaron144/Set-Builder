@@ -3,14 +3,16 @@ import { HEIGHT_SPACING, type TerrainLayers } from '../terrain/layers'
 import { hexToLinear, type TerrainPalette } from '../terrain/palette'
 import { meshSdfChunk } from '../terrain/sdfChunk'
 import type { SurfaceMap } from './carve'
-import type { CaveProfile } from './caves'
+import { smoothMin, type CaveProfile } from './caves'
 import { FEATURES } from './features'
 
 const ROCK = hexToLinear(FEATURES.cave.rockColor)
 const FLOOR = hexToLinear(FEATURES.cave.floorColor)
+const { groundBlend } = FEATURES.cave
 
 /**
- * Meshes a chunk that caves reach from the density min(ground − y, cave distance). Ground vertices take the
+ * Meshes a chunk that caves reach from the density smooth-min(ground − y, cave distance), which rounds the rim
+ * where a cave breaks the surface. Ground vertices take the
  * heightmap colours of their lattice edge; cave vertices are rock, or moss where they face up.
  */
 export function buildCaveChunk(layers: TerrainLayers, surface: SurfaceMap, caves: CaveProfile[], chunk: number, p: TerrainPalette): ChunkGeometry {
@@ -37,7 +39,7 @@ export function buildCaveChunk(layers: TerrainLayers, surface: SurfaceMap, caves
     return d
   }
   const wx = (i: number) => -half + i * HEIGHT_SPACING
-  const mesh = meshSdfChunk(size, chunk, (i, j, y) => Math.min(h[j * res + i] - y, caveAt(wx(i), y, wx(j))), lo - 1, hi + 1)
+  const mesh = meshSdfChunk(size, chunk, (i, j, y) => smoothMin(h[j * res + i] - y, caveAt(wx(i), y, wx(j)), groundBlend), lo - 1, hi + 1)
   const { positions, indices, edgeA, edgeB, t } = mesh
   const count = t.length
 

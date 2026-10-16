@@ -3,7 +3,7 @@ import { BIOME_SPACING, clipRect, HEIGHT_SPACING, heightAt, type Rect, type Terr
 import { DEFAULT_PALETTE, type TerrainPalette } from '../terrain/palette'
 import { raycastTerrain, type Vec3 } from '../terrain/pick'
 import { buildCaveChunk } from './caveChunk'
-import { profileCave, type CaveProfile } from './caves'
+import { profileCave, smoothMin, type CaveProfile } from './caves'
 import { carveRect, exclusionRect, profileSpline, type SplineProfile, type SurfaceMap } from './carve'
 import { FEATURES, type Cave, type Features, type Spline } from './features'
 import { floodPond, type PondFill } from './ponds'
@@ -148,9 +148,9 @@ export class Ground {
     return d
   }
 
-  /** Solid density at a world point: positive inside the ground, negative in air or a cave. */
+  /** Solid density at a world point: positive inside the ground, negative in air or a cave; the two blend where a cave breaks the surface. */
   density(x: number, y: number, z: number): number {
-    return Math.min(heightAt(this.layers.heights, x, z) - y, this.caveDistance(x, y, z))
+    return smoothMin(heightAt(this.layers.heights, x, z) - y, this.caveDistance(x, y, z), FEATURES.cave.groundBlend)
   }
 
   /** Where a ray first meets the ground as shown, caves included, or null. */
