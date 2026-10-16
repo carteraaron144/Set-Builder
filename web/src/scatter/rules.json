@@ -85,8 +85,8 @@
       "asset": "setbuilder-basics/pine",
       "placement": "ground",
       "biome": "forest",
-      "density": 0.02,
-      "minSpacing": 5,
+      "density": 0.04,
+      "minSpacing": 2,
       "scale": [
         0.8,
         1.25
@@ -102,8 +102,8 @@
       "asset": "setbuilder-basics/broadleaf",
       "placement": "ground",
       "biome": "forest",
-      "density": 0.008,
-      "minSpacing": 6,
+      "density": 0.02,
+      "minSpacing": 3,
       "scale": [
         0.8,
         1.25

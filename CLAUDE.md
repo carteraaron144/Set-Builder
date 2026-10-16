@@ -10,9 +10,12 @@ The design doc is a Claude Doc and the source of truth for design: https://claud
 
 - **No subagents** unless the user asks for one. Do the work in the current session. The one standing exception is the single whole-branch review at the end of a milestone.
 - **Read only what the task needs:** the files a task touches, a section of a file, a section of the design doc. Don't re-read files you just edited.
+- **On a return visit, read only what changed:** `{kind: "view", sinceRev: <rev from your last read>}`.
+- **Write block ids in full.** A read prints later ids of a session short as `.N`; prefix them with the session of the nearest full id printed above, e.g. `m33ea4t3xzc.2813`.
 - **Keep command output short:** run filtered tests (`npm test -- <filter>`) and look at the summary lines; use `-q` for Gradle; pipe long logs through `tail` or `grep`.
 - **Keep browser checks to one short pass** per visual change; prefer a screenshot of the one thing being checked.
 - **Keep reports short:** what changed, the test totals, and what wasn't verified.
+- **Keep designs concise:** 
 
 ## Tests as you go
 

@@ -1,29 +1,41 @@
 #!/bin/zsh
-# Starts the Set Builder server and opens it in Firefox once it's up.
-# Double-click in Finder, or run ./run.command. Close the window or press Ctrl+C to stop the server.
+# Starts the Set Builder API server and the Vite dev server, then opens the app in Firefox.
+# Vite serves the web app on 5173 and passes /api and /packs through to the server on 8080.
+# Double-click in Finder, or run ./run.command. Close the window or press Ctrl+C to stop both.
 
-cd "${0:A:h}/server" || exit 1
+ROOT="${0:A:h}"
 export JAVA_HOME="${JAVA_HOME:-/opt/homebrew/opt/openjdk@21}"
-URL="http://localhost:8080"
+API="http://localhost:8080"
+URL="http://localhost:5173"
+PIDS=()
+trap 'kill $PIDS 2>/dev/null' EXIT INT TERM
 
-if curl -sf "$URL/api/health" >/dev/null; then
-  echo "A server is already running at $URL; opening Firefox."
-  open -a Firefox "$URL"
-  exit 0
+if curl -sf "$API/api/health" >/dev/null; then
+  echo "The API server is already running at $API."
+else
+  (cd "$ROOT/server" && exec ./gradlew bootRun -PskipWeb) &
+  PIDS+=($!)
 fi
 
-./gradlew bootRun &
-SERVER_PID=$!
-trap 'kill $SERVER_PID 2>/dev/null' EXIT INT TERM
+if curl -sf "$URL" >/dev/null; then
+  echo "Vite is already running at $URL."
+else
+  cd "$ROOT/web" || exit 1
+  [[ -d node_modules ]] || npm install || exit 1
+  ./node_modules/.bin/vite --port 5173 --strictPort &
+  PIDS+=($!)
+fi
 
-echo "Waiting for the server..."
-until curl -sf "$URL/api/health" >/dev/null; do
-  if ! kill -0 $SERVER_PID 2>/dev/null; then
-    echo "The server stopped before it came up."
-    exit 1
-  fi
+echo "Waiting for the servers..."
+until curl -sf "$API/api/health" >/dev/null && curl -sf "$URL" >/dev/null; do
+  for pid in $PIDS; do
+    if ! kill -0 $pid 2>/dev/null; then
+      echo "A server stopped before it came up."
+      exit 1
+    fi
+  done
   sleep 1
 done
 
 open -a Firefox "$URL"
-wait $SERVER_PID
+(( ${#PIDS} )) && wait $PIDS
