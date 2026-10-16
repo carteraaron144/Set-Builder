@@ -1,14 +1,14 @@
 /**
  * Spaces out the expensive remeshes of density-field chunks: chunks queued while a wait is on are held and
  * released together once it ends, so a dragged brush remeshes a few times a second instead of every frame.
- * The wait is at least `minInterval` ms, or `costFactor` times the last remesh's duration if that is longer.
+ * A `minInterval` of 0 turns the wait off. Otherwise it is at least `minInterval` ms, or `costFactor` times the last remesh's duration if that is longer.
  */
 export class RemeshThrottle {
   private readonly pending = new Set<number>()
   private readyAt = 0
 
   constructor(
-    private readonly minInterval: number,
+    public minInterval: number,
     private readonly costFactor = 2,
   ) {}
 
@@ -26,6 +26,6 @@ export class RemeshThrottle {
 
   /** Call after remeshing what `take` returned: `end` is the time it finished and `cost` how long it took. */
   finished(end: number, cost: number): void {
-    this.readyAt = end + Math.max(this.minInterval, cost * this.costFactor)
+    this.readyAt = this.minInterval === 0 ? end : end + Math.max(this.minInterval, cost * this.costFactor)
   }
 }

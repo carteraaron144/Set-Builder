@@ -4,10 +4,8 @@ import { BufferAttribute, BufferGeometry, DynamicDrawUsage, MeshStandardMaterial
 import { chunkCount, updateChunkGeometry, type ChunkGeometry } from '../terrain/chunks'
 import { DEFAULT_PALETTE } from '../terrain/palette'
 import type { TerrainEditor } from '../terrain/terrainEditor'
+import { useEditorStore } from '../editor/editorStore'
 import { RemeshThrottle } from './remeshThrottle'
-
-/** The least time between remeshes of chunks that caves reach. */
-const SDF_REMESH_MS = 120
 
 interface Chunk {
   data: ChunkGeometry
@@ -25,7 +23,7 @@ function setBuffers(geometry: BufferGeometry, data: ChunkGeometry): void {
 
 /**
  * One flat-shaded mesh per 32 m chunk of the ground; dirty chunks are refreshed at most once per frame, in place
- * for heightmap chunks and, a few times a second, with new buffers for chunks caves reach.
+ * for heightmap chunks and, at the settings delay, with new buffers for chunks caves reach.
  */
 export function TerrainMesh({ terrain }: { terrain: TerrainEditor }) {
   const material = useMemo(() => new MeshStandardMaterial({ vertexColors: true, flatShading: true }), [])
@@ -45,15 +43,17 @@ export function TerrainMesh({ terrain }: { terrain: TerrainEditor }) {
   }, [terrain])
   useEffect(() => () => chunks.forEach((c) => c.geometry.dispose()), [chunks])
 
-  const throttle = useMemo(() => new RemeshThrottle(SDF_REMESH_MS), [terrain])
+  const throttle = useMemo(() => new RemeshThrottle(0), [terrain])
 
   useFrame(() => {
     const { ground } = terrain
+    // The settings menu picks the wait; Off (0) remeshes every frame.
+    throttle.minInterval = useEditorStore.getState().caveRemeshDelay
     for (const i of terrain.takeDirtyChunks('mesh')) {
       const c = chunks[i]
       if (!c) continue
       if (c.sdf || ground.isSdfChunk(i)) {
-        // Density-field remeshes are slow, so they are queued and run a few times a second.
+        // Density-field remeshes are slow, so they are queued and spaced out by the settings delay.
         throttle.add([i])
         continue
       }

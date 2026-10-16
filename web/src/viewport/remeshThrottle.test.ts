@@ -39,3 +39,27 @@ describe('RemeshThrottle', () => {
     expect(t.take(1)).toEqual([7])
   })
 })
+
+describe('RemeshThrottle.minInterval', () => {
+  it('can be changed between remeshes', () => {
+    const t = new RemeshThrottle(100)
+    t.minInterval = 30
+    t.add([1])
+    t.take(0)
+    t.finished(0, 0)
+    t.add([1])
+    expect(t.take(29)).toEqual([])
+    expect(t.take(30)).toEqual([1])
+  })
+})
+
+describe('RemeshThrottle off', () => {
+  it('never waits when minInterval is 0, however slow the remesh was', () => {
+    const t = new RemeshThrottle(0)
+    t.add([1])
+    t.take(0)
+    t.finished(500, 500)
+    t.add([1])
+    expect(t.take(500)).toEqual([1])
+  })
+})

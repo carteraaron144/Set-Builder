@@ -18,6 +18,7 @@ import {
 } from './editor/sceneActions'
 import { installEditorShortcuts } from './editor/shortcuts'
 import { FeaturePanel } from './editor/FeaturePanel'
+import { SettingsMenu } from './editor/SettingsMenu'
 import { ToolBar } from './editor/ToolBar'
 import { TopBar } from './editor/TopBar'
 import { Viewport } from './viewport/Viewport'
@@ -96,6 +97,7 @@ export default function App() {
         <ViewportErrorBoundary>
           <Viewport scene={scene} terrain={terrain} library={library} onBackend={setRenderBackend} />
         </ViewportErrorBoundary>
+        <SettingsMenu />
         <BrushPanel />
         <FeaturePanel />
         <ToolBar />

@@ -17,6 +17,10 @@ import type { RenderBackend } from '../viewport/renderBackend'
 
 export type Message = { kind: 'error' | 'info'; text: string } | null
 
+/** Least ms between remeshes of cave chunks while sculpting; 0 remeshes every frame. */
+export const CAVE_REMESH_DELAYS = [0, 30, 60, 120, 240] as const
+export type CaveRemeshDelay = (typeof CAVE_REMESH_DELAYS)[number]
+
 export type ToolId = 'terrain' | 'paint' | 'path' | 'river' | 'water' | 'cave'
 
 /** The tools that paint with a brush. */
@@ -50,6 +54,8 @@ export interface EditorState {
   invertToggle: boolean
   /** Scattered elements shown in the viewport. */
   scatterVisible: boolean
+  /** Settings menu: how long cave chunks wait between remeshes (0 = off). */
+  caveRemeshDelay: CaveRemeshDelay
   /** The viewport's live scatter (export reads its instances); null when none is running. */
   scatterManager: ScatterManager | null
   /** Terrace step height in metres (0.5–5). */
@@ -78,6 +84,7 @@ export interface EditorState {
   setInvertToggle(v: boolean): void
   setTerraceStep(m: number): void
   setScatterVisible(v: boolean): void
+  setCaveRemeshDelay(ms: CaveRemeshDelay): void
   setScatterManager(m: ScatterManager | null): void
   setSelection(s: Selection): void
   setPathStyle(s: PathStyle): void
@@ -115,6 +122,7 @@ const initializer =
       invertToggle: false,
       terraceStep: 1.5,
       scatterVisible: true,
+      caveRemeshDelay: 0,
       scatterManager: null,
       selection: null,
       pathStyle: 'dirt',
@@ -157,6 +165,7 @@ const initializer =
       setInvertToggle: (invertToggle) => set({ invertToggle }),
       setTerraceStep: (m) => set({ terraceStep: clamp(m, 0.5, 5) }),
       setScatterVisible: (scatterVisible) => set({ scatterVisible }),
+      setCaveRemeshDelay: (caveRemeshDelay) => set({ caveRemeshDelay }),
       setScatterManager: (scatterManager) => set({ scatterManager }),
       setSelection: (selection) => set({ selection }),
       setPathStyle: (pathStyle) => set({ pathStyle }),

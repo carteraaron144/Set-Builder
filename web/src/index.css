@@ -311,3 +311,53 @@ body,
   color: var(--text);
   text-align: right;
 }
+
+.settings-menu {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+}
+
+.settings-button {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  color: #6b7079;
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  cursor: pointer;
+}
+
+.settings-button:hover {
+  background: #f0f1f3;
+}
+
+.settings-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 240px;
+  margin-top: 8px;
+  padding: 10px 12px;
+  background: rgb(36 39 46 / 0.92);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.settings-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.settings-row select {
+  font: inherit;
+  color: var(--text);
+  background: #2e323b;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 4px 6px;
+}
