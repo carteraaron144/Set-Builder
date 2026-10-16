@@ -37,7 +37,7 @@ export function chunksForBiomeRect(r: Rect, size: SceneSize): number[] {
 export interface ChunkGeometry {
   positions: Float32Array
   colors: Float32Array
-  indices: Uint16Array
+  indices: Uint16Array | Uint32Array
 }
 
 function buildIndices(): Uint16Array {
@@ -72,70 +72,78 @@ export function buildChunkGeometry(l: TerrainLayers, chunk: number, p: TerrainPa
 }
 
 /**
+ * Writes the terrain colour of height sample (i, j) to out[k..k+2]: biomes, then earth and rock by slope, then
+ * the surface colour blended in by weight/255.
+ */
+export function terrainColorAt(l: TerrainLayers, i: number, j: number, p: TerrainPalette, surface: SurfaceMap | undefined, out: Float32Array, k: number): void {
+  const { heights, biomes } = l
+  const res = heights.resolution
+  const h = heights.data
+  const b = biomes.data
+  const bRes = biomes.resolution
+  const pb = p.biomes
+  // Slope from central differences (one-sided at the scene edge).
+  const il = Math.max(0, i - 1)
+  const ir = Math.min(res - 1, i + 1)
+  const jd = Math.max(0, j - 1)
+  const ju = Math.min(res - 1, j + 1)
+  const dx = (h[j * res + ir] - h[j * res + il]) / ((ir - il) * HEIGHT_SPACING)
+  const dz = (h[ju * res + i] - h[jd * res + i]) / ((ju - jd) * HEIGHT_SPACING)
+  const slope = Math.atan(Math.hypot(dx, dz))
+  const earth = smoothstep(p.earth.start, p.earth.full, slope)
+  const rock = smoothstep(p.rock.start, p.rock.full, slope)
+
+  // Height sample (i, j) sits on biome sample (i/2, j/2): on one or halfway between two in each axis.
+  const bj0 = Math.min(bRes - 1, j >> 1)
+  const bj1 = Math.min(bRes - 1, bj0 + 1)
+  const fz = (j & 1) * 0.5
+  const bi0 = Math.min(bRes - 1, i >> 1)
+  const bi1 = Math.min(bRes - 1, bi0 + 1)
+  const fx = (i & 1) * 0.5
+  const o00 = (bj0 * bRes + bi0) * 4
+  const o10 = (bj0 * bRes + bi1) * 4
+  const o01 = (bj1 * bRes + bi0) * 4
+  const o11 = (bj1 * bRes + bi1) * 4
+  const c00 = (1 - fx) * (1 - fz)
+  const c10 = fx * (1 - fz)
+  const c01 = (1 - fx) * fz
+  const c11 = fx * fz
+  const w0 = (b[o00] * c00 + b[o10] * c10 + b[o01] * c01 + b[o11] * c11) / 255
+  const w1 = (b[o00 + 1] * c00 + b[o10 + 1] * c10 + b[o01 + 1] * c01 + b[o11 + 1] * c11) / 255
+  const w2 = (b[o00 + 2] * c00 + b[o10 + 2] * c10 + b[o01 + 2] * c01 + b[o11 + 2] * c11) / 255
+  const w3 = (b[o00 + 3] * c00 + b[o10 + 3] * c10 + b[o01 + 3] * c01 + b[o11 + 3] * c11) / 255
+  const sw = surface ? surface.weight[j * res + i] / 255 : 0
+  const sc = sw > 0 ? p.surface[surface!.kind[j * res + i] - 1] : null
+  for (let c = 0; c < 3; c++) {
+    const biome = w0 * pb[0][c] + w1 * pb[1][c] + w2 * pb[2][c] + w3 * pb[3][c]
+    const ground = biome + (p.earth.color[c] - biome) * earth
+    const terrain = ground + (p.rock.color[c] - ground) * rock
+    out[k + c] = sc ? terrain + (sc[c] - terrain) * sw : terrain
+  }
+}
+
+/**
  * Rewrites positions and colours for a chunk in place (the index buffer never changes). With a surface map, each
  * vertex colour is blended towards its surface colour by weight/255.
  */
 export function updateChunkGeometry(l: TerrainLayers, chunk: number, p: TerrainPalette, g: ChunkGeometry, surface?: SurfaceMap): void {
-  const { heights, biomes } = l
+  const { heights } = l
   const res = heights.resolution
   const h = heights.data
   const n = chunkCount(heights.size)
   const cx = chunk % n
   const cz = Math.floor(chunk / n)
   const half = heights.size / 2
-  const b = biomes.data
-  const bRes = biomes.resolution
-  const pb = p.biomes
   for (let vj = 0; vj < CHUNK_VERTS; vj++) {
     const j = cz * CELLS + vj
     const z = -half + j * HEIGHT_SPACING
-    // Height sample j sits on biome row j/2: either on a row or halfway between two (no allocation per vertex).
-    const bj0 = Math.min(bRes - 1, j >> 1)
-    const bj1 = Math.min(bRes - 1, bj0 + 1)
-    const fz = (j & 1) * 0.5
     for (let vi = 0; vi < CHUNK_VERTS; vi++) {
       const i = cx * CELLS + vi
-      const x = -half + i * HEIGHT_SPACING
       const k = (vj * CHUNK_VERTS + vi) * 3
-      const y = h[j * res + i]
-      g.positions[k] = x
-      g.positions[k + 1] = y
+      g.positions[k] = -half + i * HEIGHT_SPACING
+      g.positions[k + 1] = h[j * res + i]
       g.positions[k + 2] = z
-
-      // Slope from central differences (one-sided at the scene edge).
-      const il = Math.max(0, i - 1)
-      const ir = Math.min(res - 1, i + 1)
-      const jd = Math.max(0, j - 1)
-      const ju = Math.min(res - 1, j + 1)
-      const dx = (h[j * res + ir] - h[j * res + il]) / ((ir - il) * HEIGHT_SPACING)
-      const dz = (h[ju * res + i] - h[jd * res + i]) / ((ju - jd) * HEIGHT_SPACING)
-      const slope = Math.atan(Math.hypot(dx, dz))
-      const earth = smoothstep(p.earth.start, p.earth.full, slope)
-      const rock = smoothstep(p.rock.start, p.rock.full, slope)
-
-      const bi0 = Math.min(bRes - 1, i >> 1)
-      const bi1 = Math.min(bRes - 1, bi0 + 1)
-      const fx = (i & 1) * 0.5
-      const o00 = (bj0 * bRes + bi0) * 4
-      const o10 = (bj0 * bRes + bi1) * 4
-      const o01 = (bj1 * bRes + bi0) * 4
-      const o11 = (bj1 * bRes + bi1) * 4
-      const c00 = (1 - fx) * (1 - fz)
-      const c10 = fx * (1 - fz)
-      const c01 = (1 - fx) * fz
-      const c11 = fx * fz
-      const w0 = (b[o00] * c00 + b[o10] * c10 + b[o01] * c01 + b[o11] * c11) / 255
-      const w1 = (b[o00 + 1] * c00 + b[o10 + 1] * c10 + b[o01 + 1] * c01 + b[o11 + 1] * c11) / 255
-      const w2 = (b[o00 + 2] * c00 + b[o10 + 2] * c10 + b[o01 + 2] * c01 + b[o11 + 2] * c11) / 255
-      const w3 = (b[o00 + 3] * c00 + b[o10 + 3] * c10 + b[o01 + 3] * c01 + b[o11 + 3] * c11) / 255
-      const sw = surface ? surface.weight[j * res + i] / 255 : 0
-      const sc = sw > 0 ? p.surface[surface!.kind[j * res + i] - 1] : null
-      for (let c = 0; c < 3; c++) {
-        const biome = w0 * pb[0][c] + w1 * pb[1][c] + w2 * pb[2][c] + w3 * pb[3][c]
-        const ground = biome + (p.earth.color[c] - biome) * earth
-        const terrain = ground + (p.rock.color[c] - ground) * rock
-        g.colors[k + c] = sc ? terrain + (sc[c] - terrain) * sw : terrain
-      }
+      terrainColorAt(l, i, j, p, surface, g.colors, k)
     }
   }
 }

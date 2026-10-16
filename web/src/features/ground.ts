@@ -1,6 +1,10 @@
-import { clipRect, type Rect, type TerrainLayers } from '../terrain/layers'
+import { buildChunkGeometry, CHUNK_VERTS, chunkCount, type ChunkGeometry } from '../terrain/chunks'
+import { BIOME_SPACING, clipRect, HEIGHT_SPACING, heightAt, type Rect, type TerrainLayers } from '../terrain/layers'
+import { DEFAULT_PALETTE, type TerrainPalette } from '../terrain/palette'
+import { buildCaveChunk } from './caveChunk'
+import { profileCave, type CaveProfile } from './caves'
 import { carveRect, exclusionRect, profileSpline, type SplineProfile, type SurfaceMap } from './carve'
-import type { Features, Spline } from './features'
+import { FEATURES, type Cave, type Features, type Spline } from './features'
 import { floodPond, type PondFill } from './ponds'
 
 const overlaps = (a: Rect, b: Rect) => a.x0 <= b.x1 && b.x0 <= a.x1 && a.z0 <= b.z1 && b.z0 <= a.z1
@@ -13,6 +17,7 @@ const union = (a: Rect, b: Rect): Rect => ({
 })
 
 const sameSpline = (a: Spline | undefined, b: Spline) => a !== undefined && JSON.stringify(a) === JSON.stringify(b)
+const sameCave = (a: Cave | undefined, b: Cave) => a !== undefined && JSON.stringify(a) === JSON.stringify(b)
 
 function sameFill(a: PondFill, b: PondFill): boolean {
   if (a.level !== b.level || a.capped !== b.capped) return false
@@ -26,13 +31,14 @@ function sameFill(a: PondFill, b: PondFill): boolean {
 
 /**
  * The terrain as shown: the sculpted layers with paths and rivers carved in, surface colours, flooded ponds,
- * and where scatter is cleared. Derived from the layers and features, never saved.
+ * caves hollowed out, and where scatter is cleared. Derived from the layers and features, never saved.
  */
 export class Ground {
   readonly layers: TerrainLayers
   readonly surface: SurfaceMap
   profiles: SplineProfile[] = []
   ponds: PondFill[] = []
+  caves: CaveProfile[] = []
   /** Bumped whenever river or pond water may have changed. */
   waterVersion = 0
   private readonly base: TerrainLayers
@@ -40,6 +46,7 @@ export class Ground {
   /** Scatter cleared by splines and by ponds, on the biome grid; combined into `exclusion`. */
   private readonly splineClear: Uint8Array
   private readonly pondClear: Uint8Array
+  private readonly caveClear: Uint8Array
   private combined: Uint8Array | null = null
 
   constructor(base: TerrainLayers, features: Features) {
@@ -51,6 +58,7 @@ export class Ground {
     const b = base.biomes.resolution
     this.splineClear = new Uint8Array(b * b)
     this.pondClear = new Uint8Array(b * b)
+    this.caveClear = new Uint8Array(b * b)
     this.rebuild(features, null)
   }
 
@@ -93,6 +101,19 @@ export class Ground {
       if (br) exclusionRect(profiles, bRes, this.base.heights.size, br, this.splineClear)
     }
 
+    const caves = features.caves.map((c, i) => (sameCave(old.caves[i], c) ? this.caves[i] : profileCave(this.base.heights, c)))
+    let cavesChanged = caves.length !== this.caves.length
+    for (let i = 0; i < Math.max(caves.length, this.caves.length); i++) {
+      if (caves[i] === this.caves[i]) continue
+      cavesChanged = true
+      for (const fp of [this.caves[i]?.footprint, caves[i]?.footprint]) if (fp) rects.push(fp)
+    }
+    this.caves = caves
+
+    // Cave exclusion reads the carved heights, so it follows any change under a cave.
+    const underCave = rects.some((r) => caves.some((c) => c.footprint && overlaps(c.footprint, r)))
+    if (cavesChanged || underCave) this.clearAroundCaves()
+
     const ponds = features.ponds.map((p) => floodPond(this.layers.heights, p))
     let pondsChanged = ponds.length !== this.ponds.length
     for (let i = 0; i < Math.max(ponds.length, this.ponds.length); i++) {
@@ -110,13 +131,64 @@ export class Ground {
     if (pondsChanged) this.clearAroundPonds()
     if (waterChanged || pondsChanged) this.waterVersion++
 
-    const any = features.splines.length > 0 || features.ponds.length > 0
+    const any = features.splines.length > 0 || features.ponds.length > 0 || features.caves.length > 0
     if (!any) this.combined = null
     else {
       this.combined ??= new Uint8Array(this.splineClear.length)
-      for (let i = 0; i < this.combined.length; i++) this.combined[i] = this.splineClear[i] | this.pondClear[i]
+      for (let i = 0; i < this.combined.length; i++) this.combined[i] = this.splineClear[i] | this.pondClear[i] | this.caveClear[i]
     }
     return rects
+  }
+
+  /** Signed distance to the nearest cave (negative inside one); Infinity well away from every cave. */
+  caveDistance(x: number, y: number, z: number): number {
+    let d = Infinity
+    for (const c of this.caves) d = Math.min(d, c.sdf(x, y, z))
+    return d
+  }
+
+  /** Solid density at a world point: positive inside the ground, negative in air or a cave. */
+  density(x: number, y: number, z: number): number {
+    return Math.min(heightAt(this.layers.heights, x, z) - y, this.caveDistance(x, y, z))
+  }
+
+  /** Whether chunk `chunk` is meshed from the density field: its sample square meets a cave footprint. */
+  isSdfChunk(chunk: number): boolean {
+    return this.cavesOf(chunk).length > 0
+  }
+
+  /** The chunk's mesh: the heightmap grid, or the density field's surface where caves reach it. */
+  chunkGeometry(chunk: number, palette: TerrainPalette = DEFAULT_PALETTE): ChunkGeometry {
+    const caves = this.cavesOf(chunk)
+    if (caves.length === 0) return buildChunkGeometry(this.layers, chunk, palette, this.surface)
+    return buildCaveChunk(this.layers, this.surface, caves, chunk, palette)
+  }
+
+  private cavesOf(chunk: number): CaveProfile[] {
+    const n = chunkCount(this.base.heights.size)
+    const cells = CHUNK_VERTS - 1
+    const square: Rect = { x0: (chunk % n) * cells, z0: Math.floor(chunk / n) * cells, x1: (chunk % n) * cells + cells, z1: Math.floor(chunk / n) * cells + cells }
+    return this.caves.filter((c) => c.footprint && overlaps(c.footprint, square))
+  }
+
+  /** Marks biome samples where a cave comes within the clear margin of the ground surface. */
+  private clearAroundCaves(): void {
+    const out = this.caveClear
+    out.fill(0)
+    const { size } = this.base.heights
+    const bRes = this.base.biomes.resolution
+    const half = size / 2
+    const toBiome = HEIGHT_SPACING / BIOME_SPACING
+    for (const c of this.caves) {
+      const fp = c.footprint && clipRect({ x0: Math.floor(c.footprint.x0 * toBiome), z0: Math.floor(c.footprint.z0 * toBiome), x1: Math.ceil(c.footprint.x1 * toBiome), z1: Math.ceil(c.footprint.z1 * toBiome) }, bRes)
+      if (!fp) continue
+      for (let bj = fp.z0; bj <= fp.z1; bj++)
+        for (let bi = fp.x0; bi <= fp.x1; bi++) {
+          const x = -half + bi * BIOME_SPACING
+          const z = -half + bj * BIOME_SPACING
+          if (c.sdf(x, heightAt(this.layers.heights, x, z), z) < FEATURES.cave.clearMargin) out[bj * bRes + bi] = 1
+        }
+    }
   }
 
   /** Marks biome samples within 1 m of a flooded height sample. */
