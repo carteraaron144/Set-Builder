@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest'
+import type { Cave } from '../features/features'
+import { Ground } from '../features/ground'
 import { createFlatLayers } from './layers'
 import { raycastTerrain } from './pick'
 
@@ -39,5 +41,44 @@ describe('raycastTerrain', () => {
     expect(hit).not.toBeNull()
     expect(Math.abs(hit!.x)).toBeLessThan(0.25)
     expect(hit!.y).toBeGreaterThan(29)
+  })
+})
+
+describe('raycastTerrain with a density field', () => {
+  // A hill rising east from x = -56 to a 12 m plateau, with a level tunnel at y = 3 from x = -53 to -39.
+  const SIZE = 128
+  const RES = SIZE * 2 + 1
+  const hill = createFlatLayers(SIZE)
+  for (let j = 0; j < RES; j++)
+    for (let i = 0; i < RES; i++) hill.heights.data[j * RES + i] = Math.min(12, Math.max(0, (-SIZE / 2 + i * 0.5 + 56) * 0.8))
+  const cave: Cave = {
+    id: 'c',
+    radius: 2,
+    points: [
+      { x: -53, y: 3, z: -48, chamber: 0 },
+      { x: -39, y: 3, z: -48, chamber: 0 },
+    ],
+  }
+  const ground = new Ground(hill, { splines: [], ponds: [], caves: [cave] })
+  const density = (x: number, y: number, z: number) => ground.density(x, y, z)
+
+  it('flies into a cave mouth and stops at the tunnel end', () => {
+    const origin = { x: -70, y: 3, z: -48 }
+    const dir = { x: 1, y: 0, z: 0 }
+    expect(raycastTerrain(ground.layers.heights, origin, dir)!.x).toBeCloseTo(-52.25, 1)
+    const hit = raycastTerrain(ground.layers.heights, origin, dir, 2000, density)!
+    expect(hit.x).toBeGreaterThan(-38)
+    expect(hit.x).toBeLessThan(-36)
+    expect(Math.abs(density(hit.x, hit.y, hit.z))).toBeLessThan(0.05)
+  })
+
+  it('matches the heightmap away from caves', () => {
+    const origin = { x: 20, y: 40, z: 20 }
+    const dir = { x: -0.3, y: -1, z: 0.2 }
+    const plain = raycastTerrain(ground.layers.heights, origin, dir)!
+    const dense = raycastTerrain(ground.layers.heights, origin, dir, 2000, density)!
+    expect(dense.x).toBeCloseTo(plain.x, 3)
+    expect(dense.y).toBeCloseTo(plain.y, 3)
+    expect(dense.z).toBeCloseTo(plain.z, 3)
   })
 })

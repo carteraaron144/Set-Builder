@@ -9,8 +9,14 @@ export interface Vec3 {
 const MARCH_STEP = HEIGHT_SPACING / 2 // horizontal metres: half a sample, so thin spikes aren't stepped over
 const BISECTIONS = 8
 
-/** Where a ray first meets the terrain surface inside the scene square, or null. `dir` needn't be normalised. */
-export function raycastTerrain(h: Heightmap, origin: Vec3, dir: Vec3, maxDistance = 2000): Vec3 | null {
+/** Solid density at a world point: > 0 inside the ground. */
+export type Density = (x: number, y: number, z: number) => number
+
+/**
+ * Where a ray first meets the terrain surface inside the scene square, or null. `dir` needn't be normalised.
+ * With a density (the ground with caves), the surface is where the density turns positive.
+ */
+export function raycastTerrain(h: Heightmap, origin: Vec3, dir: Vec3, maxDistance = 2000, density?: Density): Vec3 | null {
   const len = Math.hypot(dir.x, dir.y, dir.z)
   if (len === 0) return null
   const d = { x: dir.x / len, y: dir.y / len, z: dir.z / len }
@@ -34,18 +40,19 @@ export function raycastTerrain(h: Heightmap, origin: Vec3, dir: Vec3, maxDistanc
   const point = (t: number): Vec3 => ({ x: origin.x + d.x * t, y: origin.y + d.y * t, z: origin.z + d.z * t })
   const above = (t: number) => {
     const p = point(t)
-    return p.y - heightAt(h, p.x, p.z)
+    return density ? -density(p.x, p.y, p.z) : p.y - heightAt(h, p.x, p.z)
   }
 
   if (above(tMin) <= 0) return point(tMin)
   const horizontal = Math.hypot(d.x, d.z)
-  if (horizontal < 1e-9) {
+  if (horizontal < 1e-9 && !density) {
     // Straight up or down: the hit is the ground under the origin.
     if (d.y >= 0) return null
     const p = point(tMin)
     return { x: p.x, y: heightAt(h, p.x, p.z), z: p.z }
   }
-  const step = MARCH_STEP / horizontal
+  // Heights only change horizontally; a cave can be met anywhere along the ray, so step along it.
+  const step = density ? MARCH_STEP : MARCH_STEP / horizontal
   let prev = tMin
   for (let t = tMin + step; prev < tMax; t += step) {
     const tt = Math.min(t, tMax)

@@ -1,6 +1,7 @@
 import { buildChunkGeometry, CHUNK_VERTS, chunkCount, type ChunkGeometry } from '../terrain/chunks'
 import { BIOME_SPACING, clipRect, HEIGHT_SPACING, heightAt, type Rect, type TerrainLayers } from '../terrain/layers'
 import { DEFAULT_PALETTE, type TerrainPalette } from '../terrain/palette'
+import { raycastTerrain, type Vec3 } from '../terrain/pick'
 import { buildCaveChunk } from './caveChunk'
 import { profileCave, type CaveProfile } from './caves'
 import { carveRect, exclusionRect, profileSpline, type SplineProfile, type SurfaceMap } from './carve'
@@ -150,6 +151,12 @@ export class Ground {
   /** Solid density at a world point: positive inside the ground, negative in air or a cave. */
   density(x: number, y: number, z: number): number {
     return Math.min(heightAt(this.layers.heights, x, z) - y, this.caveDistance(x, y, z))
+  }
+
+  /** Where a ray first meets the ground as shown, caves included, or null. */
+  raycast(origin: Vec3, dir: Vec3): Vec3 | null {
+    const density = this.caves.length > 0 ? (x: number, y: number, z: number) => this.density(x, y, z) : undefined
+    return raycastTerrain(this.layers.heights, origin, dir, 2000, density)
   }
 
   /** Whether chunk `chunk` is meshed from the density field: its sample square meets a cave footprint. */

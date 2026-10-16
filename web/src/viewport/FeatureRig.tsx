@@ -17,7 +17,6 @@ import { useEditorStore } from '../editor/editorStore'
 import type { SplinePoint } from '../features/features'
 import { sampleSpline } from '../features/spline'
 import { heightAt } from '../terrain/layers'
-import { raycastTerrain } from '../terrain/pick'
 import type { Scene } from '../scene/scene'
 import type { TerrainEditor } from '../terrain/terrainEditor'
 import { PondInput } from '../tools/pondInput'
@@ -100,7 +99,7 @@ export function FeatureRig({ terrain, scene }: { terrain: TerrainEditor; scene: 
       if (r.width === 0 || r.height === 0) return null
       ndc.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1)
       raycaster.setFromCamera(ndc, camera)
-      const hit = raycastTerrain(terrain.ground.layers.heights, raycaster.ray.origin, raycaster.ray.direction)
+      const hit = terrain.ground.raycast(raycaster.ray.origin, raycaster.ray.direction)
       return hit ? { x: hit.x, z: hit.z } : null
     }
     const apply = (r: SplineResult | null) => {

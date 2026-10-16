@@ -1,16 +1,28 @@
 import { useFrame } from '@react-three/fiber'
 import { useEffect, useMemo } from 'react'
 import { BufferAttribute, BufferGeometry, DynamicDrawUsage, MeshStandardMaterial } from 'three'
-import { buildChunkGeometry, chunkCount, updateChunkGeometry, type ChunkGeometry } from '../terrain/chunks'
+import { chunkCount, updateChunkGeometry, type ChunkGeometry } from '../terrain/chunks'
 import { DEFAULT_PALETTE } from '../terrain/palette'
 import type { TerrainEditor } from '../terrain/terrainEditor'
 
 interface Chunk {
   data: ChunkGeometry
   geometry: BufferGeometry
+  /** Meshed from the density field: its vertex count changes, so it gets new buffers instead of updates. */
+  sdf: boolean
 }
 
-/** One flat-shaded mesh per 32 m chunk of the carved ground; dirty chunks are refreshed in place, at most once per frame. */
+function setBuffers(geometry: BufferGeometry, data: ChunkGeometry): void {
+  geometry.setAttribute('position', new BufferAttribute(data.positions, 3).setUsage(DynamicDrawUsage))
+  geometry.setAttribute('color', new BufferAttribute(data.colors, 3).setUsage(DynamicDrawUsage))
+  geometry.setIndex(new BufferAttribute(data.indices, 1))
+  geometry.computeBoundingSphere()
+}
+
+/**
+ * One flat-shaded mesh per 32 m chunk of the ground; dirty chunks are refreshed at most once per frame, in place
+ * for heightmap chunks and with new buffers for chunks caves reach.
+ */
 export function TerrainMesh({ terrain }: { terrain: TerrainEditor }) {
   const material = useMemo(() => new MeshStandardMaterial({ vertexColors: true, flatShading: true }), [])
   useEffect(() => () => material.dispose(), [material])
@@ -19,15 +31,12 @@ export function TerrainMesh({ terrain }: { terrain: TerrainEditor }) {
     // A fresh build covers everything, so drop changes queued before it.
     terrain.takeDirtyChunks('mesh')
     const n = chunkCount(terrain.layers.heights.size)
-    const { layers, surface } = terrain.ground
+    const { ground } = terrain
     return Array.from({ length: n * n }, (_, i) => {
-      const data = buildChunkGeometry(layers, i, DEFAULT_PALETTE, surface)
+      const data = ground.chunkGeometry(i, DEFAULT_PALETTE)
       const geometry = new BufferGeometry()
-      geometry.setAttribute('position', new BufferAttribute(data.positions, 3).setUsage(DynamicDrawUsage))
-      geometry.setAttribute('color', new BufferAttribute(data.colors, 3).setUsage(DynamicDrawUsage))
-      geometry.setIndex(new BufferAttribute(data.indices, 1))
-      geometry.computeBoundingSphere()
-      return { data, geometry }
+      setBuffers(geometry, data)
+      return { data, geometry, sdf: ground.isSdfChunk(i) }
     })
   }, [terrain])
   useEffect(() => () => chunks.forEach((c) => c.geometry.dispose()), [chunks])
@@ -36,7 +45,15 @@ export function TerrainMesh({ terrain }: { terrain: TerrainEditor }) {
     for (const i of terrain.takeDirtyChunks('mesh')) {
       const c = chunks[i]
       if (!c) continue
-      updateChunkGeometry(terrain.ground.layers, i, DEFAULT_PALETTE, c.data, terrain.ground.surface)
+      const { ground } = terrain
+      const sdf = ground.isSdfChunk(i)
+      if (sdf || c.sdf) {
+        c.data = ground.chunkGeometry(i, DEFAULT_PALETTE)
+        c.sdf = sdf
+        setBuffers(c.geometry, c.data)
+        continue
+      }
+      updateChunkGeometry(ground.layers, i, DEFAULT_PALETTE, c.data, ground.surface)
       c.geometry.getAttribute('position').needsUpdate = true
       c.geometry.getAttribute('color').needsUpdate = true
       c.geometry.computeBoundingSphere()

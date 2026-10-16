@@ -11,7 +11,6 @@ import {
 } from '../camera/overheadCamera'
 import type { Scene } from '../scene/scene'
 import { heightAt } from '../terrain/layers'
-import { raycastTerrain } from '../terrain/pick'
 import type { TerrainEditor } from '../terrain/terrainEditor'
 
 const GROUND = new Plane(new Vector3(0, 1, 0), 0)
@@ -40,7 +39,7 @@ export function CameraRig({ scene, terrain }: { scene: Scene; terrain: TerrainEd
       if (r.width === 0 || r.height === 0) return null
       ndc.set(((clientX - r.left) / r.width) * 2 - 1, -((clientY - r.top) / r.height) * 2 + 1)
       raycaster.setFromCamera(ndc, camera)
-      const onTerrain = raycastTerrain(terrain.layers.heights, raycaster.ray.origin, raycaster.ray.direction)
+      const onTerrain = terrain.ground.raycast(raycaster.ray.origin, raycaster.ray.direction)
       if (onTerrain) return { x: onTerrain.x, z: onTerrain.z }
       // Off the scene: zoom toward the y = 0 plane instead.
       return raycaster.ray.intersectPlane(GROUND, hit) ? { x: hit.x, z: hit.z } : null
