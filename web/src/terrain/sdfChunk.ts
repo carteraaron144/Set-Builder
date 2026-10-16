@@ -34,8 +34,19 @@ const TETS = [
 /**
  * Meshes chunk `chunk` of a scene by marching tetrahedra on the height-sample lattice, with y levels every
  * 0.5 m from y0 to y1 (both snapped outward to 0.5 m). The field must be solid at y0 and air at y1.
+ *
+ * `band` gives, per height sample, a world-y range [lo, hi] outside which the field is known: solid below lo,
+ * air above hi. The density is only evaluated inside it (plus the level at each end), which skips most of a
+ * tall column when the surface is thin.
  */
-export function meshSdfChunk(size: SceneSize, chunk: number, density: DensityAt, y0: number, y1: number): SdfMesh {
+export function meshSdfChunk(
+  size: SceneSize,
+  chunk: number,
+  density: DensityAt,
+  y0: number,
+  y1: number,
+  band?: (i: number, j: number) => readonly [number, number],
+): SdfMesh {
   const res = size * 2 + 1
   const n = chunkCount(size)
   const ci = (chunk % n) * CELLS
@@ -46,16 +57,47 @@ export function meshSdfChunk(size: SceneSize, chunk: number, density: DensityAt,
   const V = CHUNK_VERTS
   const yAt = (k: number) => yBase + k * HEIGHT_SPACING
 
-  // Density on every lattice point; exact zeros count as air so a crossing never lands on a corner.
+  // Density on the lattice points inside each column's band; below it is solid and above it air. Exact zeros
+  // count as air so a crossing never lands on a corner.
   const field = new Float64Array(V * V * levels)
-  for (let k = 0; k < levels; k++) {
-    const y = yAt(k)
-    for (let vj = 0; vj < V; vj++)
-      for (let vi = 0; vi < V; vi++) {
-        const d = density(ci + vi, cj + vj, y)
-        field[(k * V + vj) * V + vi] = d === 0 ? -1e-9 : d
+  // Band levels per column, widened by the neighbouring columns' and one level: tetrahedra cross diagonally
+  // between columns, so a filled level must never sit on an edge with a computed level of the other sign.
+  const W = V + 2
+  const bandLo = new Int32Array(W * W)
+  const bandHi = new Int32Array(W * W)
+  for (let wj = 0; wj < W; wj++)
+    for (let wi = 0; wi < W; wi++) {
+      let kLo = 0
+      let kHi = levels - 1
+      if (band) {
+        const [lo, hi] = band(ci + wi - 1, cj + wj - 1)
+        kLo = Math.min(levels, Math.max(0, Math.floor((lo - yBase) / HEIGHT_SPACING)))
+        kHi = Math.min(levels - 1, Math.ceil((hi - yBase) / HEIGHT_SPACING))
       }
-  }
+      bandLo[wj * W + wi] = kLo
+      bandHi[wj * W + wi] = kHi
+    }
+  for (let vj = 0; vj < V; vj++)
+    for (let vi = 0; vi < V; vi++) {
+      let kLo = levels
+      let kHi = -1
+      for (let dj = 0; dj <= 2; dj++)
+        for (let di = 0; di <= 2; di++) {
+          kLo = Math.min(kLo, bandLo[(vj + dj) * W + vi + di])
+          kHi = Math.max(kHi, bandHi[(vj + dj) * W + vi + di])
+        }
+      kLo = Math.max(0, kLo - 1)
+      kHi = Math.min(levels - 1, kHi + 1)
+      for (let k = 0; k < levels; k++) {
+        const at = (k * V + vj) * V + vi
+        if (k < kLo) field[at] = 1
+        else if (k > kHi) field[at] = -1
+        else {
+          const d = density(ci + vi, cj + vj, yAt(k))
+          field[at] = d === 0 ? -1e-9 : d
+        }
+      }
+    }
 
   const positions: number[] = []
   const edgeA: number[] = []

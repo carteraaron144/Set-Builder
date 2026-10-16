@@ -128,4 +128,26 @@ describe('meshSdfChunk', () => {
       expect(z).toBeCloseTo(m.positions[v * 3 + 2], 4)
     }
   })
+
+  it('meshes a banded field exactly like the full column, with far fewer density calls', () => {
+    let full = 0
+    let banded = 0
+    const a = meshSdfChunk(SIZE, 0, (i, j, y) => (full++, withHole(i, j, y)), Y0, Y1)
+    // Air above the ground; solid below the ball's bottom (y = -3) or, away from it, a metre under the ground.
+    const band = (i: number, j: number): readonly [number, number] => [Math.min(h(i, j) - 1, -4.5), h(i, j)]
+    const b = meshSdfChunk(SIZE, 0, (i, j, y) => (banded++, withHole(i, j, y)), Y0, Y1, band)
+    expect(Array.from(b.positions)).toEqual(Array.from(a.positions))
+    expect(Array.from(b.indices)).toEqual(Array.from(a.indices))
+    expect(banded).toBeLessThan(full * 0.8)
+  })
+
+  it('skips most of a tall column when the band is thin', () => {
+    let full = 0
+    let banded = 0
+    meshSdfChunk(SIZE, 0, (i, j, y) => (full++, terrainOnly(i, j, y)), -40, 40)
+    const band = (i: number, j: number): readonly [number, number] => [h(i, j) - 1, h(i, j)]
+    const m = meshSdfChunk(SIZE, 0, (i, j, y) => (banded++, terrainOnly(i, j, y)), -40, 40, band)
+    expect(m.indices.length).toBeGreaterThan(0)
+    expect(banded).toBeLessThan(full * 0.25)
+  })
 })

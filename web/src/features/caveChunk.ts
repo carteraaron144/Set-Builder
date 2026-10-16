@@ -39,7 +39,20 @@ export function buildCaveChunk(layers: TerrainLayers, surface: SurfaceMap, caves
     return d
   }
   const wx = (i: number) => -half + i * HEIGHT_SPACING
-  const mesh = meshSdfChunk(size, chunk, (i, j, y) => smoothMin(h[j * res + i] - y, caveAt(wx(i), y, wx(j)), groundBlend), lo - 1, hi + 1)
+  // Air lies above the ground and, away from caves, solid a metre below it; under a cave, solid starts below its
+  // lowest point by more than the blends can lift the field.
+  const caveDepth = groundBlend + FEATURES.cave.blend
+  const clampIndex = (v: number) => Math.min(res - 1, Math.max(0, v))
+  const band = (i: number, j: number): readonly [number, number] => {
+    const ground = h[clampIndex(j) * res + clampIndex(i)]
+    let floor = ground - 1
+    for (const c of caves) {
+      const fp = c.footprint
+      if (fp && i >= fp.x0 && i <= fp.x1 && j >= fp.z0 && j <= fp.z1) floor = Math.min(floor, c.bounds.y0 - caveDepth)
+    }
+    return [floor, ground]
+  }
+  const mesh = meshSdfChunk(size, chunk, (i, j, y) => smoothMin(h[j * res + i] - y, caveAt(wx(i), y, wx(j)), groundBlend), lo - 1, hi + 1, band)
   const { positions, indices, edgeA, edgeB, t } = mesh
   const count = t.length
 
