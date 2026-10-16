@@ -62,6 +62,8 @@ export interface EditorState {
   canRedo: boolean
   /** Shows another scene (flat layers unless given); clears dirty and history. */
   replaceScene(scene: Scene, layers?: TerrainLayers): void
+  /** The scene as it should be saved: `scene` with the editor's current features. */
+  currentScene(): Scene
   rename(name: string): void
   markSaved(): void
   setRenderBackend(b: RenderBackend): void
@@ -118,6 +120,7 @@ const initializer =
       featureKeys: null,
       canUndo: false,
       canRedo: false,
+      currentScene: () => ({ ...get().scene, features: get().terrain.features }),
       replaceScene: (next, layers) =>
         set({
           scene: next,

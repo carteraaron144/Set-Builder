@@ -1,13 +1,15 @@
-import { Mesh, type BufferGeometry, type Object3D } from 'three'
+import { Mesh, type BufferGeometry, type Material, type Object3D } from 'three'
 import { beforeAll, describe, expect, it } from 'vitest'
 import type { AssetLibrary } from '../assets/assetLibrary'
 import { assetInfoOf } from '../assets/assetLibrary'
+import type { Features } from '../features/features'
+import { Ground } from '../features/ground'
 import { createScene } from '../scene/scene'
 import { rulesFor } from '../scatter/rules'
 import { scatterChunk, type Instance } from '../scatter/scatter'
 import { paint, sculpt } from '../terrain/brush'
 import { buildChunkGeometry } from '../terrain/chunks'
-import { createFlatLayers } from '../terrain/layers'
+import { cloneLayers, createFlatLayers } from '../terrain/layers'
 import { DEFAULT_PALETTE } from '../terrain/palette'
 import { loadBasicsLibrary } from '../test/basicsLibrary'
 import { buildExportScene, EXPORT_DEFAULTS, type ExportOptions } from './exportScene'
@@ -129,3 +131,48 @@ describe('buildExportScene', () => {
     expect([...names].sort()).toEqual(['bark', 'collision', 'grass', 'leaf', 'pine', 'stone', 'terrain'].sort())
   })
 })
+
+describe('buildExportScene with features', () => {
+  const features: Features = {
+    splines: [
+      { id: 'p', kind: 'path', style: 'dirt', width: 2, points: [{ x: -25, z: -5 }, { x: 25, z: -5 }] },
+      { id: 'r', kind: 'river', style: 'dirt', width: 3, points: [{ x: -25, z: 8 }, { x: 0, z: 8 }] },
+    ],
+    ponds: [{ id: 'w', seed: { x: -14, z: 16 }, level: -0.1 }],
+  }
+  /** The shared layers with a dip for the pond. */
+  const dipped = () => {
+    const l = cloneLayers(layers)
+    sculpt(l.heights, 'lower', { radius: 5, strength: 1, falloff: 0.5 }, { x: -14, z: 16, dt: 1, invert: false }, { flattenTo: 0, seed: 1 })
+    return l
+  }
+  const ground = () => new Ground(dipped(), features)
+  const buildWith = (o: Partial<ExportOptions> = {}) =>
+    buildExportScene({ scene, layers, ground: ground(), instancesByRule, rules, library }, { ...EXPORT_DEFAULTS, ...o })
+
+  it('exports each river and pond as a water node with no collision', () => {
+    const root = buildWith()
+    for (const name of ['River 1', 'Pond 1']) {
+      const m = root.getObjectByName(name) as Mesh
+      expect(m, name).toBeInstanceOf(Mesh)
+      expect((m.material as Material).name).toBe('water')
+      expect(root.getObjectByName(`${name}-col`)).toBeUndefined()
+    }
+    for (const grouping of ['chunk', 'merged'] as const) {
+      const r = buildWith({ grouping })
+      expect(r.getObjectByName('River 1'), grouping).toBeDefined()
+      expect(r.getObjectByName('Pond 1'), grouping).toBeDefined()
+    }
+  })
+
+  it('builds the terrain from the carved heights with the path surface colours', () => {
+    const g = ground()
+    const root = buildWith()
+    const c0 = root.getObjectByName('terrain_c0_0') as Mesh
+    const expected = buildChunkGeometry(g.layers, 0, DEFAULT_PALETTE, g.surface)
+    expect([...c0.geometry.getAttribute('position').array]).toEqual([...expected.positions])
+    expect([...c0.geometry.getAttribute('color').array]).toEqual([...expected.colors])
+    expect([...expected.colors]).not.toEqual([...buildChunkGeometry(layers, 0, DEFAULT_PALETTE).colors])
+  })
+})
+

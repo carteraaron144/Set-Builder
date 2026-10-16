@@ -46,7 +46,8 @@ export function newScene(deps: ActionDeps, name: string, size: SceneSize): void 
 
 export async function saveCurrent(deps: ActionDeps): Promise<void> {
   // Copy before the first await: strokes keep mutating the live layers while the write is in flight.
-  const { scene, editVersion, terrain } = deps.store.getState()
+  const { scene: live, editVersion, terrain, currentScene } = deps.store.getState()
+  const scene = currentScene()
   const layers = cloneLayers(terrain.layers)
   try {
     const sceneStore = await deps.sceneStore()
@@ -57,7 +58,7 @@ export async function saveCurrent(deps: ActionDeps): Promise<void> {
   }
   const state = deps.store.getState()
   // Edits made while the write was in flight are still unsaved.
-  if (state.scene === scene && state.editVersion === editVersion) state.markSaved()
+  if (state.scene === live && state.editVersion === editVersion) state.markSaved()
   state.setMessage({ kind: 'info', text: MESSAGES.saved })
 }
 
@@ -134,12 +135,13 @@ export async function exportCurrent(deps: ExportDeps, o: ExportOptions): Promise
     const rules = deps.library ? rulesFor(scene.generatorVersion) : { maxInstances: 0, rules: [] }
     const instancesByRule: Instance[][] = rules.rules.map(() => [])
     if (deps.library) {
-      const inputs = { layers: terrain.layers, seed: scene.seed, rules, exclusion: null }
+      // Scatter stands on the carved ground and keeps out of the paths, rivers and ponds.
+      const inputs = { layers: terrain.ground.layers, seed: scene.seed, rules, exclusion: terrain.ground.exclusion }
       const assets = assetInfoOf(library)
       const n = chunkCount(scene.size)
       for (let c = 0; c < n * n; c++) for (const i of scatterChunk(inputs, c, assets).instances) instancesByRule[i.rule].push(i)
     }
-    const root = buildExportScene({ scene, layers: terrain.layers, instancesByRule, rules, library }, o)
+    const root = buildExportScene({ scene, layers: terrain.layers, ground: terrain.ground, instancesByRule, rules, library }, o)
     const bytes = await (deps.writeGlb ?? defaultWriteGlb)(root)
     deps.download(filename, bytes)
     setMessage({ kind: 'info', text: `Exported ${filename} (${(bytes.byteLength / 1024 / 1024).toFixed(1)} MB)` })
@@ -149,7 +151,8 @@ export async function exportCurrent(deps: ExportDeps, o: ExportOptions): Promise
 }
 
 export function downloadCurrent(deps: ActionDeps): void {
-  const { scene, terrain } = deps.store.getState()
+  const { terrain, currentScene } = deps.store.getState()
+  const scene = currentScene()
   deps.download(sceneFilename(scene.name), writeSceneFile(scene, terrain.layers))
 }
 

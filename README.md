@@ -30,7 +30,7 @@ Add `?renderer=webgl2` to the URL to force the WebGL2 backend (to check the fall
 | Orbit | Right-drag | Q / E |
 | Zoom | Wheel (toward the cursor) | R / F |
 | Tilt | Right-drag vertically | Page Up / Page Down |
-| Pick a tool | Bottom toolbar (Terrain, Paint) | Esc deselects |
+| Pick a tool | Bottom toolbar (Terrain, Paint, Path, River, Water) | Esc deselects |
 | Apply the brush | Left-drag | |
 | Invert (lower, erase) | Alt-drag, or the panel's Invert toggle | |
 | Brush size | Size slider | `[` / `]` |
@@ -41,6 +41,20 @@ Terrain modes are raise, lower, smooth, flatten (to the height where the stroke 
 heights to multiples of the Step height, 0.5–5 m, for stepped earthen mounds). Paint brushes the
 meadow, forest, rocky and swamp biomes; slopes shade to earth from 30° and to rock from 60° automatically.
 
+### Paths, rivers and ponds
+
+| Action | Path / River | Water (ponds) |
+| --- | --- | --- |
+| Draw | Click points; double-click or Enter finishes; Backspace drops the last point; Esc cancels | Click to make a pond 1 m above the ground |
+| Join | Start or finish within 2 m of another end of the same kind | |
+| Select | Click the line (not near its ends) | Click its water or seed handle |
+| Edit | Drag a point; Alt-click the line to add one; Width (and Style, for paths) in the panel | Drag up/down to set the level (0.05 m per pixel), or the Level slider |
+| Delete | Delete/Backspace: the point under the cursor, or the whole line | Delete/Backspace, or the panel's Delete |
+
+Paths (dirt trails or cobble roads) and rivers carve the terrain under them; all three clear scatter around them. A pond
+fills its hollow up to its level, capped just below the rim where it would spill off the map. Undo while drawing only
+cancels the draft. Scenes save the paths, rivers and ponds; carving is recomputed on load.
+
 ## Scatter and export
 
 Painted biomes fill with trees, rocks, bushes, grass and reeds, and steep cliffs (60°+, 3 m+ tall) with rock pillars,
@@ -50,7 +64,8 @@ saved; scenes store only their painted layers and seed, and scatter is regenerat
 
 **Export** (top bar) downloads the generated scene as glTF 2.0 (`.glb`), metres, Y-up: one node per element (sharing
 meshes), one mesh per chunk, or one merged mesh; optional `-col` collision meshes (terrain at 1 m, tree trunks, rock and
-cliff boxes); grass and reeds are optional. No normals are written, so importers shade faces flat. Measured for a
+cliff boxes); grass and reeds are optional. Paths are part of the terrain's vertex colours; each river and pond is its own
+node (`River 1`, `Pond 1`, …) with the shared `water` material and no collision. No normals are written, so importers shade faces flat. Measured for a
 256 m scene with four biomes and a cliff (~7,000 elements): 14.3 MB in 0.2 s (default), 15.4 MB per chunk, 19.4 MB
 merged. Check an export in Blender (5.2 wires the terrain's vertex colours automatically):
 

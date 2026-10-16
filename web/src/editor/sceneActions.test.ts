@@ -350,3 +350,83 @@ describe('exportCurrent scatter', () => {
     expect(root!.getObjectByName('scatter')!.children).toHaveLength(expected)
   })
 })
+
+describe('features in scene actions', () => {
+  const features = {
+    splines: [
+      {
+        id: 'p',
+        kind: 'path' as const,
+        style: 'dirt' as const,
+        width: 2,
+        points: [
+          { x: -25, z: 0 },
+          { x: 0, z: 4 },
+          { x: 25, z: 0 },
+        ],
+      },
+      {
+        id: 'r',
+        kind: 'river' as const,
+        style: 'dirt' as const,
+        width: 3,
+        points: [
+          { x: 0, z: -25 },
+          { x: 10, z: -10 },
+        ],
+      },
+    ],
+    ponds: [{ id: 'w', seed: { x: -15, z: 15 }, level: -0.5 }],
+  }
+
+  function withFeatures() {
+    const s = setup({ scene: createScene({ size: 64, name: 'Features', seed: 5 }) })
+    const { terrain } = s.store.getState()
+    // A dip for the pond, so it holds water.
+    terrain.beginStroke({ tool: 'terrain', mode: 'lower' }, { radius: 6, strength: 1, falloff: 0.5 }, { x: -15, z: 15 })
+    terrain.dab({ x: -15, z: 15 }, 0.5, false)
+    terrain.endStroke()
+    terrain.commitFeatures(features)
+    return s
+  }
+
+  it('saves the editor features with the scene', async () => {
+    const { store, deps, dbName } = withFeatures()
+    await saveCurrent(deps)
+    const saved = await (await openSceneStore(dbName)).load(store.getState().scene.id)
+    expect(saved?.scene.features).toEqual(features)
+  })
+
+  it('round-trips features through download and upload with an identical ground', async () => {
+    const { store, deps, download } = withFeatures()
+    const before = store.getState().terrain.ground
+    downloadCurrent(deps)
+    const other = setup()
+    await uploadSceneFile(other.deps, fileOf(download.mock.calls[0][1]))
+    const after = other.store.getState().terrain
+    expect(after.features).toEqual(features)
+    expect(after.ground.layers.heights.data).toEqual(before.layers.heights.data)
+    expect(after.ground.surface.kind).toEqual(before.surface.kind)
+    expect(after.ground.surface.weight).toEqual(before.surface.weight)
+    expect(after.ground.exclusion).toEqual(before.exclusion)
+  })
+
+  it('exports water nodes and keeps scatter out of the exclusion mask', async () => {
+    const { loadBasicsLibrary } = await import('../test/basicsLibrary')
+    const library = await loadBasicsLibrary()
+    const { store, deps } = withFeatures()
+    const { terrain } = store.getState()
+    terrain.beginStroke({ tool: 'paint', biome: 'forest' }, { radius: 40, strength: 1, falloff: 0 }, { x: 0, z: 0 })
+    terrain.dab({ x: 0, z: 0 }, 1, false)
+    terrain.endStroke()
+    let root: import('three').Object3D | null = null
+    await exportCurrent({ ...deps, library, writeGlb: async (r) => ((root = r), new Uint8Array(4)) }, { grouping: 'element', collision: true, includeGrass: true })
+    expect(root!.getObjectByName('River 1')).toBeDefined()
+    expect(root!.getObjectByName('Pond 1')).toBeDefined()
+    const exclusion = terrain.ground.exclusion!
+    const res = terrain.layers.biomes.resolution
+    const scatter = root!.getObjectByName('scatter')!.children.filter((c) => !c.name.endsWith('-col'))
+    expect(scatter.length).toBeGreaterThan(0)
+    for (const c of scatter) expect(exclusion[Math.round(c.position.z + 32) * res + Math.round(c.position.x + 32)], c.name).toBe(0)
+  })
+})

@@ -14,10 +14,13 @@ import {
 } from 'three'
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js'
 import type { AssetLibrary, LoadedAsset } from '../assets/assetLibrary'
+import type { Ground } from '../features/ground'
+import { buildWater, WATER_MATERIAL } from '../features/water'
 import type { Scene } from '../scene/scene'
 import type { ScatterRules } from '../scatter/rules'
 import type { Instance } from '../scatter/scatter'
 import { buildChunkGeometry, CHUNK_SIZE, chunkCount } from '../terrain/chunks'
+import type { SurfaceMap } from '../features/carve'
 import type { TerrainLayers } from '../terrain/layers'
 import { DEFAULT_PALETTE } from '../terrain/palette'
 
@@ -34,6 +37,8 @@ export const EXPORT_DEFAULTS: ExportOptions = { grouping: 'element', collision: 
 export interface ExportInput {
   scene: Scene
   layers: TerrainLayers
+  /** The ground with paths, rivers and ponds; when given, the terrain is its carved layers and surface colours. */
+  ground?: Ground
   instancesByRule: Instance[][]
   rules: ScatterRules
   library: AssetLibrary
@@ -57,8 +62,8 @@ function mergeable(g: BufferGeometry): BufferGeometry {
   return out
 }
 
-function terrainChunk(layers: TerrainLayers, chunk: number): BufferGeometry {
-  const c = buildChunkGeometry(layers, chunk, DEFAULT_PALETTE)
+function terrainChunk(layers: TerrainLayers, chunk: number, surface?: SurfaceMap): BufferGeometry {
+  const c = buildChunkGeometry(layers, chunk, DEFAULT_PALETTE, surface)
   const g = new BufferGeometry()
   g.setAttribute('position', new BufferAttribute(c.positions, 3))
   g.setAttribute('color', new BufferAttribute(c.colors, 3))
@@ -100,9 +105,29 @@ function chunkName(chunk: number, n: number) {
   return `${chunk % n}_${Math.floor(chunk / n)}`
 }
 
-/** Builds the scene to export from data (not the render scene): terrain + scatter, grouped as requested. */
+/** River and pond water, one node each named as in `buildWater`, sharing the `water` material; no collision. */
+function waterMeshes(ground: Ground): Mesh[] {
+  const material = exportMaterial(WATER_MATERIAL.name, {
+    color: WATER_MATERIAL.color,
+    opacity: WATER_MATERIAL.opacity,
+    transparent: true,
+  })
+  return buildWater(ground).map((w) => {
+    const g = new BufferGeometry()
+    g.setAttribute('position', new BufferAttribute(w.positions, 3))
+    g.setIndex(new BufferAttribute(w.indices, 1))
+    const m = new Mesh(g, material)
+    m.name = w.name
+    return m
+  })
+}
+
+/** Builds the scene to export from data (not the render scene): terrain + scatter + water, grouped as requested. */
 export function buildExportScene(input: ExportInput, o: ExportOptions): Group {
-  const { scene, layers, instancesByRule, rules, library } = input
+  const { scene, instancesByRule, rules, library, ground } = input
+  const layers = ground?.layers ?? input.layers
+  const surface = ground?.surface
+  const water = ground ? waterMeshes(ground) : []
   const size = layers.heights.size
   const n = chunkCount(size)
   const chunkOf = (i: Instance) => {
@@ -151,7 +176,7 @@ export function buildExportScene(input: ExportInput, o: ExportOptions): Group {
 
   if (o.grouping === 'element') {
     for (let c = 0; c < n * n; c++) {
-      terrain.add(named(new Mesh(terrainChunk(layers, c), terrainMat), `terrain_c${chunkName(c, n)}`))
+      terrain.add(named(new Mesh(terrainChunk(layers, c, surface), terrainMat), `terrain_c${chunkName(c, n)}`))
       if (o.collision) terrain.add(named(new Mesh(terrainCollision(layers, c), collisionMat), `terrain_c${chunkName(c, n)}-col`))
     }
     const shared = new Map<LoadedAsset, { parts: { slot: string; geometry: BufferGeometry }[]; col: BufferGeometry | null }>()
@@ -178,6 +203,7 @@ export function buildExportScene(input: ExportInput, o: ExportOptions): Group {
         scatter.add(col)
       }
     }
+    if (water.length) root.add(...water)
     return root
   }
 
@@ -194,7 +220,7 @@ export function buildExportScene(input: ExportInput, o: ExportOptions): Group {
       const col = o.collision ? collisionShape(e.asset) : null
       if (col) cols.push(col.applyMatrix4(m))
     }
-    const terrainGeom = mergeGeometries(chunks.map((c) => terrainChunk(layers, c)))!
+    const terrainGeom = mergeGeometries(chunks.map((c) => terrainChunk(layers, c, surface)))!
     const parts = [terrainGeom, ...[...bySlot.values()].map((gs) => mergeGeometries(gs)!)]
     const materials = [terrainMat, ...[...bySlot.keys()].map(materialFor)]
     const name = o.grouping === 'chunk' ? `chunk_${chunkName(chunks[0], n)}` : 'scene'
@@ -206,5 +232,6 @@ export function buildExportScene(input: ExportInput, o: ExportOptions): Group {
     }
   }
   root.remove(terrain, scatter)
+  if (water.length) root.add(...water)
   return root
 }

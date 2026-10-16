@@ -21,6 +21,17 @@ describe('editor store terrain state', () => {
     expect([s.canUndo, s.canRedo, s.dirty]).toEqual([false, false, false])
   })
 
+  it("builds the editor with a replaced scene's features and reports them in currentScene", () => {
+    const store = createEditorStore()
+    const features = { splines: [], ponds: [{ id: 'w', seed: { x: 1, z: 2 }, level: 3 }] }
+    store.getState().replaceScene({ ...createScene({ size: 64 }), features })
+    expect(store.getState().terrain.features).toEqual(features)
+    expect(store.getState().canUndo).toBe(false)
+    store.getState().terrain.commitFeatures({ splines: [], ponds: [] })
+    expect(store.getState().currentScene().features).toEqual({ splines: [], ponds: [] })
+    expect(store.getState().currentScene().id).toBe(store.getState().scene.id)
+  })
+
   it('uses the layers it is given', () => {
     const store = createEditorStore()
     const layers = createFlatLayers(256)
