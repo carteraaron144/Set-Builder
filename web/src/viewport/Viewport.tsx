@@ -9,6 +9,7 @@ import { BrushRig } from './BrushRig'
 import { browserSupport, detectSupport, forcedBackend, type RenderBackend } from './renderBackend'
 import { ScatterMesh } from './ScatterMesh'
 import { TerrainMesh } from './TerrainMesh'
+import { WaterMesh } from './WaterMesh'
 
 export function Viewport({
   scene,
@@ -71,6 +72,7 @@ export function Viewport({
         {/* BrushRig before TerrainMesh: a frame's dab is meshed in the same frame. */}
         <BrushRig terrain={terrain} />
         <TerrainMesh terrain={terrain} />
+        <WaterMesh terrain={terrain} />
         {library && <ScatterMesh terrain={terrain} scene={scene} library={library} />}
       </Canvas>
     </div>
