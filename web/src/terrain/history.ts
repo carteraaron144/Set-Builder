@@ -1,3 +1,4 @@
+import { featuresBytes, type Features } from '../features/features'
 import type { Rect } from './layers'
 
 /** The before and after of the rect one stroke changed, in one layer. */
@@ -8,15 +9,27 @@ export interface LayerPatch {
   after: Float32Array | Uint8Array
 }
 
+/** A feature edit: the whole feature set before and after. */
+export interface FeaturesPatch {
+  kind: 'features'
+  before: Features
+  after: Features
+}
+
+export type HistoryEntry = LayerPatch | FeaturesPatch
+
+export const isFeaturesPatch = (e: HistoryEntry): e is FeaturesPatch => 'kind' in e && e.kind === 'features'
+
 export const HISTORY_LIMITS = { maxStrokes: 100, maxBytes: 64 * 1024 * 1024 }
 
-const patchBytes = (p: LayerPatch) => p.before.byteLength + p.after.byteLength
+const patchBytes = (p: HistoryEntry) =>
+  isFeaturesPatch(p) ? featuresBytes(p.before) + featuresBytes(p.after) : p.before.byteLength + p.after.byteLength
 
-/** Undo/redo stacks of stroke patches, capped by count and memory (oldest dropped first). */
+/** Undo/redo stacks of stroke patches and feature edits, capped by count and memory (oldest dropped first). */
 export class StrokeHistory {
   private readonly limits: { maxStrokes: number; maxBytes: number }
-  private readonly done: LayerPatch[] = []
-  private readonly undone: LayerPatch[] = []
+  private readonly done: HistoryEntry[] = []
+  private readonly undone: HistoryEntry[] = []
   private total = 0
 
   constructor(limits = HISTORY_LIMITS) {
@@ -35,7 +48,7 @@ export class StrokeHistory {
     return this.total
   }
 
-  push(p: LayerPatch): void {
+  push(p: HistoryEntry): void {
     for (const r of this.undone) this.total -= patchBytes(r)
     this.undone.length = 0
     this.done.push(p)
@@ -45,13 +58,13 @@ export class StrokeHistory {
     }
   }
 
-  undo(): LayerPatch | undefined {
+  undo(): HistoryEntry | undefined {
     const p = this.done.pop()
     if (p) this.undone.push(p)
     return p
   }
 
-  redo(): LayerPatch | undefined {
+  redo(): HistoryEntry | undefined {
     const p = this.undone.pop()
     if (p) this.done.push(p)
     return p

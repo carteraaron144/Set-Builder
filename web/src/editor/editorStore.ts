@@ -66,7 +66,7 @@ const initializer =
   (initialScene: () => Scene) =>
   (set: StoreApi<EditorState>['setState'], get: StoreApi<EditorState>['getState']): EditorState => {
     const terrainFor = (scene: Scene, layers: TerrainLayers): TerrainEditor => {
-      const editor: TerrainEditor = new TerrainEditor(layers, scene.seed, () => {
+      const editor: TerrainEditor = new TerrainEditor(layers, scene.seed, scene.features, () => {
         // A replaced scene's editor may still be finishing a stroke; ignore it.
         if (get().terrain !== editor) return
         set((s) => ({ dirty: true, editVersion: s.editVersion + 1, canUndo: editor.canUndo, canRedo: editor.canRedo }))

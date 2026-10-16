@@ -1,7 +1,9 @@
 import type { GroundPoint } from '../camera/overheadCamera'
+import type { Features } from '../features/features'
+import { Ground } from '../features/ground'
 import { paint, sculpt, type BrushSettings, type TerrainMode } from './brush'
 import { chunksForBiomeRect, chunksForHeightRect } from './chunks'
-import { StrokeHistory, type LayerPatch } from './history'
+import { isFeaturesPatch, StrokeHistory, type HistoryEntry } from './history'
 import { cropRect, heightAt, pasteRect, type BiomeId, type Rect, type TerrainLayers } from './layers'
 
 export type StrokeTool = { tool: 'terrain'; mode: TerrainMode; terraceStep?: number } | { tool: 'paint'; biome: BiomeId }
@@ -27,20 +29,54 @@ function sameValues(a: Float32Array | Uint8Array, b: Float32Array | Uint8Array):
   return true
 }
 
-/** Owns the painted layers: applies strokes, records one undo patch per stroke, and tracks dirty chunks. */
+/**
+ * Owns the painted layers and the features drawn on them: applies strokes and feature edits, records one undo
+ * entry per stroke or edit, keeps the carved ground current and tracks dirty chunks.
+ */
 export class TerrainEditor {
   readonly layers: TerrainLayers
+  readonly ground: Ground
   private readonly seed: number
   private readonly onChange: (c: TerrainChange) => void
   private readonly history = new StrokeHistory()
   /** Dirty chunks per consumer: the terrain mesh and scatter each drain their own set. */
   private readonly dirty = { mesh: new Set<number>(), scatter: new Set<number>() }
   private stroke: Stroke | null = null
+  private current: Features
+  /** The features as of the last commit (or undo/redo): the `before` of the next feature edit. */
+  private committed: Features
 
-  constructor(layers: TerrainLayers, seed: number, onChange: (c: TerrainChange) => void) {
+  constructor(layers: TerrainLayers, seed: number, features: Features, onChange: (c: TerrainChange) => void) {
     this.layers = layers
     this.seed = seed
     this.onChange = onChange
+    this.current = this.committed = structuredClone(features)
+    this.ground = new Ground(layers, this.current)
+  }
+
+  get features(): Features {
+    return this.current
+  }
+
+  /** Bumped whenever river or pond water may have changed. */
+  get waterVersion(): number {
+    return this.ground.waterVersion
+  }
+
+  /** Records one undo entry from the last committed features to `next`; nothing if they are equal. */
+  commitFeatures(next: Features): void {
+    const after = structuredClone(next)
+    const before = this.committed
+    this.setFeatures(after)
+    this.committed = after
+    if (JSON.stringify(before) === JSON.stringify(after)) return
+    this.history.push({ kind: 'features', before, after })
+    this.onChange('stroke')
+  }
+
+  /** Shows `next` without recording it, while a drag is in progress; finish with `commitFeatures`. */
+  previewFeatures(next: Features): void {
+    this.setFeatures(structuredClone(next))
   }
 
   get strokeActive(): boolean {
@@ -108,7 +144,7 @@ export class TerrainEditor {
     }
     const p = this.history.undo()
     if (!p) return false
-    this.apply(p, p.before)
+    this.apply(p, 'before')
     this.onChange('undo')
     return true
   }
@@ -118,7 +154,7 @@ export class TerrainEditor {
     if (this.stroke) return false
     const p = this.history.redo()
     if (!p) return false
-    this.apply(p, p.after)
+    this.apply(p, 'after')
     this.onChange('redo')
     return true
   }
@@ -134,15 +170,29 @@ export class TerrainEditor {
     return tool.tool === 'terrain' ? this.layers.heights.data : this.layers.biomes.data
   }
 
-  private apply(p: LayerPatch, values: Float32Array | Uint8Array): void {
+  private apply(p: HistoryEntry, side: 'before' | 'after'): void {
+    if (isFeaturesPatch(p)) {
+      this.setFeatures(p[side])
+      this.committed = p[side]
+      return
+    }
     const layer = this.layers[p.layer]
-    pasteRect(layer.data, layer.resolution, p.layer === 'heights' ? 1 : 4, p.rect, values)
+    pasteRect(layer.data, layer.resolution, p.layer === 'heights' ? 1 : 4, p.rect, p[side])
     this.markDirty(p.layer, p.rect)
+  }
+
+  private setFeatures(next: Features): void {
+    this.current = next
+    for (const r of this.ground.rebuild(next, null)) this.markChunks(chunksForHeightRect(r, this.layers.heights.size))
   }
 
   private markDirty(layer: 'heights' | 'biomes', rect: Rect): void {
     const size = this.layers.heights.size
-    const chunks = layer === 'heights' ? chunksForHeightRect(rect, size) : chunksForBiomeRect(rect, size)
+    if (layer === 'biomes') return this.markChunks(chunksForBiomeRect(rect, size))
+    for (const r of this.ground.rebuild(this.current, rect)) this.markChunks(chunksForHeightRect(r, size))
+  }
+
+  private markChunks(chunks: number[]): void {
     for (const c of chunks) {
       this.dirty.mesh.add(c)
       this.dirty.scatter.add(c)

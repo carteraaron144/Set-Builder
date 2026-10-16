@@ -40,7 +40,7 @@ function setup(size: SceneSize = 64, run: ScatterRunner = immediate, opts: { onC
   const scene = createScene({ size, seed: 5 })
   const layers = createFlatLayers(size)
   for (let o = 0; o < layers.biomes.data.length; o += 4) layers.biomes.data.set([0, 255, 0, 0], o)
-  const terrain = new TerrainEditor(layers, scene.seed, () => {})
+  const terrain = new TerrainEditor(layers, scene.seed, scene.features, () => {})
   const manager = new ScatterManager(terrain, scene, run, assets, opts)
   return { scene, terrain, manager }
 }
@@ -127,7 +127,7 @@ describe('ScatterManager', () => {
     await flush()
     expect(a.manager.instancesByRule()).toEqual(b.manager.instancesByRule())
     const read = readSceneFile(writeSceneFile(a.scene, a.terrain.layers))
-    const c = new ScatterManager(new TerrainEditor(read.layers, read.scene.seed, () => {}), read.scene, immediate, assets)
+    const c = new ScatterManager(new TerrainEditor(read.layers, read.scene.seed, read.scene.features, () => {}), read.scene, immediate, assets)
     c.pump()
     await flush()
     expect(c.instancesByRule()).toEqual(a.manager.instancesByRule())
