@@ -30,7 +30,7 @@ Add `?renderer=webgl2` to the URL to force the WebGL2 backend (to check the fall
 | Orbit | Right-drag | Q / E |
 | Zoom | Wheel (toward the cursor) | R / F |
 | Tilt | Right-drag vertically | Page Up / Page Down |
-| Pick a tool | Bottom toolbar (Terrain, Paint, Path, River, Water) | Esc deselects |
+| Pick a tool | Bottom toolbar (Terrain, Paint, Path, River, Water, Caves) | C toggles Caves; Esc deselects |
 | Apply the brush | Left-drag | |
 | Invert (lower, erase) | Alt-drag, or the panel's Invert toggle | |
 | Brush size | Size slider | `[` / `]` |
@@ -55,6 +55,19 @@ Paths (dirt trails or cobble roads) and rivers carve the terrain under them; all
 fills its hollow up to its level, capped just below the rim where it would spill off the map. Undo while drawing only
 cancels the draft. Scenes save the paths, rivers and ponds; carving is recomputed on load.
 
+### Caves
+
+| Action | Caves (`C`) |
+| --- | --- |
+| Draw | Click the ground for the entrance, then click points; each new point takes the previous one's height. Double-click or Enter finishes; Backspace drops the last point; Esc cancels |
+| Select | Click a point (points and centrelines show through the ground) |
+| Edit | Drag a point in x, z at its height; the panel sets the tunnel radius (1–4 m) and the selected point's Height and Chamber (3–12 m) |
+| Delete | Delete/Backspace: the point under the cursor, or the whole cave; or the panel's Delete |
+
+A cave hollows a tunnel with a flat floor (rock walls, moss where the floor faces up) and clears scatter where it breaks
+the surface. Chunks a cave reaches are meshed from a signed-distance field instead of the heightmap; clicks reach into
+a cave's mouth.
+
 ## Scatter and export
 
 Painted biomes fill with trees, rocks, bushes, grass and reeds, and steep cliffs (60°+, 3 m+ tall) with rock pillars,
@@ -63,8 +76,8 @@ make-pack`). Scatter rules and colours are data: `web/src/scatter/rules.json`, `
 saved; scenes store only their painted layers and seed, and scatter is regenerated identically on load.
 
 **Export** (top bar) downloads the generated scene as glTF 2.0 (`.glb`), metres, Y-up: one node per element (sharing
-meshes), one mesh per chunk, or one merged mesh; optional `-col` collision meshes (terrain at 1 m, tree trunks, rock and
-cliff boxes); grass and reeds are optional. Paths are part of the terrain's vertex colours; each river and pond is its own
+meshes), one mesh per chunk, or one merged mesh; optional `-col` collision meshes (terrain at 1 m, or as rendered where caves
+reach; tree trunks, rock and cliff boxes); grass and reeds are optional. Paths are part of the terrain's vertex colours; each river and pond is its own
 node (`River 1`, `Pond 1`, …) with the shared `water` material and no collision. No normals are written, so importers shade faces flat. Measured for a
 256 m scene with four biomes and a cliff (~7,000 elements): 14.3 MB in 0.2 s (default), 15.4 MB per chunk, 19.4 MB
 merged. Check an export in Blender (5.2 wires the terrain's vertex colours automatically):
