@@ -28,10 +28,10 @@ const DUPLICATE = 0.5
 const TOO_MANY_POINTS = `A cave can have at most ${FEATURE_LIMITS.maxCavePoints} points.`
 const TOO_MANY_CAVES = `A scene can have at most ${FEATURE_LIMITS.maxCaves} caves.`
 
-const clampY = (y: number) => Math.min(MAX_HEIGHT, Math.max(MIN_HEIGHT, y))
+export const clampY = (y: number) => Math.min(MAX_HEIGHT, Math.max(MIN_HEIGHT, y))
 
 /** Distance from `p` to the ray (to its origin for points behind it). */
-function rayDistance(r: Ray, p: Vec): number {
+export function rayDistance(r: Ray, p: Vec): number {
   const len = Math.hypot(r.dir.x, r.dir.y, r.dir.z)
   if (len === 0) return Infinity
   const dx = p.x - r.origin.x
