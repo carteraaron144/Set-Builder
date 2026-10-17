@@ -56,3 +56,15 @@ describe('SettingsMenu chunk grid', () => {
     expect(useEditorStore.getState().showChunkGrid).toBe(false)
   })
 })
+
+describe('SettingsMenu grass overhangs', () => {
+  it('toggles grass overhangs, off by default', async () => {
+    expect(useEditorStore.getState().grassOverhangs).toBe(false)
+    render(<SettingsMenu />)
+    await userEvent.click(screen.getByRole('button', { name: 'Settings' }))
+    const box = screen.getByLabelText('Grass overhangs') as HTMLInputElement
+    expect(box.checked).toBe(false)
+    await userEvent.click(box)
+    expect(useEditorStore.getState().grassOverhangs).toBe(true)
+  })
+})

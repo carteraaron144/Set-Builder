@@ -42,6 +42,8 @@ export interface ExportInput {
   instancesByRule: Instance[][]
   rules: ScatterRules
   library: AssetLibrary
+  /** Hang grass lips over cliff tops in the terrain chunks (the settings menu's Grass overhangs). */
+  overhangs?: boolean
 }
 
 const exportMaterial = (name: string, extra: ConstructorParameters<typeof MeshStandardMaterial>[0] = {}) =>
@@ -134,12 +136,11 @@ export function buildExportScene(input: ExportInput, o: ExportOptions): Group {
   const { scene, instancesByRule, rules, library, ground } = input
   const layers = ground?.layers ?? input.layers
   const surface = ground?.surface
-  /** A chunk's render geometry, from the density field where caves reach, with its grass overhangs. */
-  const chunkGeometry = (c: number) =>
-    withOverhang(
-      ground ? ground.chunkGeometry(c, DEFAULT_PALETTE) : buildChunkGeometry(layers, c, DEFAULT_PALETTE, surface),
-      buildOverhangGeometry(layers, c, DEFAULT_PALETTE, surface),
-    )
+  /** A chunk's render geometry, from the density field where caves reach, with any grass overhangs. */
+  const chunkGeometry = (c: number) => {
+    const g = ground ? ground.chunkGeometry(c, DEFAULT_PALETTE) : buildChunkGeometry(layers, c, DEFAULT_PALETTE, surface)
+    return input.overhangs ? withOverhang(g, buildOverhangGeometry(layers, c, DEFAULT_PALETTE, surface)) : g
+  }
   const chunkCollision = (c: number, render?: ChunkGeometry) =>
     ground?.isSdfChunk(c) ? sdfCollision(render ?? chunkGeometry(c)) : terrainCollision(layers, c)
   const water = ground ? waterMeshes(ground) : []

@@ -61,6 +61,8 @@ export interface EditorState {
   hideCavesWhileStroking: boolean
   /** Settings menu: draw the 32 m chunk boundaries on the ground. */
   showChunkGrid: boolean
+  /** Settings menu: hang grass lips over cliff tops, in the viewport and in exports. */
+  grassOverhangs: boolean
   /** The viewport's live scatter (export reads its instances); null when none is running. */
   scatterManager: ScatterManager | null
   /** Terrace step height in metres (0.5–5). */
@@ -92,6 +94,7 @@ export interface EditorState {
   setCaveRemeshDelay(ms: CaveRemeshDelay): void
   setHideCavesWhileStroking(v: boolean): void
   setShowChunkGrid(v: boolean): void
+  setGrassOverhangs(v: boolean): void
   setScatterManager(m: ScatterManager | null): void
   setSelection(s: Selection): void
   setPathStyle(s: PathStyle): void
@@ -132,6 +135,7 @@ const initializer =
       caveRemeshDelay: 0,
       hideCavesWhileStroking: false,
       showChunkGrid: false,
+      grassOverhangs: false,
       scatterManager: null,
       selection: null,
       pathStyle: 'dirt',
@@ -182,6 +186,7 @@ const initializer =
       setCaveRemeshDelay: (caveRemeshDelay) => set({ caveRemeshDelay }),
       setHideCavesWhileStroking: (hideCavesWhileStroking) => set({ hideCavesWhileStroking }),
       setShowChunkGrid: (showChunkGrid) => set({ showChunkGrid }),
+      setGrassOverhangs: (grassOverhangs) => set({ grassOverhangs }),
       setScatterManager: (scatterManager) => set({ scatterManager }),
       setSelection: (selection) => set({ selection }),
       setPathStyle: (pathStyle) => set({ pathStyle }),

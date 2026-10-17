@@ -10,6 +10,8 @@ export function SettingsMenu() {
   const setHideCaves = useEditorStore((s) => s.setHideCavesWhileStroking)
   const showGrid = useEditorStore((s) => s.showChunkGrid)
   const setShowGrid = useEditorStore((s) => s.setShowChunkGrid)
+  const overhangs = useEditorStore((s) => s.grassOverhangs)
+  const setOverhangs = useEditorStore((s) => s.setGrassOverhangs)
 
   return (
     <div className="settings-menu">
@@ -42,6 +44,11 @@ export function SettingsMenu() {
             Show chunk grid
           </label>
           <p className="panel-hint">Draws the 32 m chunk boundaries on the ground.</p>
+          <label className="settings-check">
+            <input type="checkbox" checked={overhangs} onChange={(e) => setOverhangs(e.target.checked)} />
+            Grass overhangs
+          </label>
+          <p className="panel-hint">Hangs a lip of grass over steep cliff tops, in the viewport and in exports.</p>
         </div>
       )}
     </div>

@@ -1,5 +1,6 @@
 import 'fake-indexeddb/auto'
 import { strToU8, zipSync } from 'fflate'
+import type { Mesh, Object3D } from 'three'
 import { describe, expect, it, vi } from 'vitest'
 import { openSceneStore, StorageUnavailableError, type SceneStore } from '../persistence/sceneStore'
 import { createScene, type Scene } from '../scene/scene'
@@ -318,6 +319,22 @@ describe('exportCurrent', () => {
     expect(download).toHaveBeenCalledTimes(1)
     expect(download.mock.calls[0][0]).toBe('my-scene.glb')
     expect(store.getState().message).toEqual({ kind: 'info', text: 'Exported my-scene.glb (3.0 MB)' })
+  })
+
+  it('exports grass overhangs when the setting is on', async () => {
+    const { store, deps } = setup()
+    const layers = createFlatLayers(128)
+    const res = layers.heights.resolution
+    for (let j = 0; j < res; j++) for (let i = 0; i <= 30; i++) layers.heights.data[j * res + i] = 10
+    store.getState().replaceScene(store.getState().scene, layers)
+    const terrainVerts = async () => {
+      let root: Object3D | null = null
+      await exportCurrent({ ...deps, library: null, writeGlb: async (r) => ((root = r), new Uint8Array(4)) }, { ...EXPORT_DEFAULTS, collision: false })
+      return (root!.getObjectByName('terrain_c0_0') as Mesh).geometry.getAttribute('position').count
+    }
+    expect(await terrainVerts()).toBe(65 * 65)
+    store.getState().setGrassOverhangs(true)
+    expect(await terrainVerts()).toBeGreaterThan(65 * 65)
   })
 
   it('reports an exporter failure and leaves the scene untouched', async () => {

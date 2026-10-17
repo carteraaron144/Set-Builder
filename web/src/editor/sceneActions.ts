@@ -126,7 +126,7 @@ export interface ExportDeps extends ActionDeps {
  * current layers (it is a pure function), so the file never depends on how far the viewport's Worker has got.
  */
 export async function exportCurrent(deps: ExportDeps, o: ExportOptions): Promise<void> {
-  const { scene, terrain, setMessage } = deps.store.getState()
+  const { scene, terrain, setMessage, grassOverhangs } = deps.store.getState()
   const filename = slugify(scene.name) + '.glb'
   try {
     // Let the dialog paint "Exporting…" before the synchronous build.
@@ -141,7 +141,7 @@ export async function exportCurrent(deps: ExportDeps, o: ExportOptions): Promise
       const n = chunkCount(scene.size)
       for (let c = 0; c < n * n; c++) for (const i of scatterChunk(inputs, c, assets).instances) instancesByRule[i.rule].push(i)
     }
-    const root = buildExportScene({ scene, layers: terrain.layers, ground: terrain.ground, instancesByRule, rules, library }, o)
+    const root = buildExportScene({ scene, layers: terrain.layers, ground: terrain.ground, instancesByRule, rules, library, overhangs: grassOverhangs }, o)
     const bytes = await (deps.writeGlb ?? defaultWriteGlb)(root)
     deps.download(filename, bytes)
     setMessage({ kind: 'info', text: `Exported ${filename} (${(bytes.byteLength / 1024 / 1024).toFixed(1)} MB)` })

@@ -8,6 +8,7 @@ import { DEFAULT_PALETTE } from '../terrain/palette'
 import type { TerrainEditor } from '../terrain/terrainEditor'
 import { useEditorStore } from '../editor/editorStore'
 import { CaveHider } from './caveHider'
+import { overhangsToBuild } from './overhangUpdates'
 import { RemeshThrottle } from './remeshThrottle'
 import { caveMeshRequest } from '../features/caveMesh'
 import { CaveMeshManager } from './caveMeshManager'
@@ -18,8 +19,10 @@ interface Chunk {
   geometry: BufferGeometry
   /** Meshed from the density field: its vertex count changes, so it gets new buffers instead of updates. */
   sdf: boolean
-  /** Grass overhangs along cliff tops, rebuilt whenever the chunk changes. */
+  /** Grass overhangs along cliff tops, rebuilt whenever the chunk changes while the setting is on. */
   lip: BufferGeometry
+  /** Whether the lip has any triangles; an empty one stays hidden rather than uploading empty buffers. */
+  hasLip: boolean
 }
 
 function setBuffers(geometry: BufferGeometry, data: ChunkGeometry): void {
@@ -29,12 +32,10 @@ function setBuffers(geometry: BufferGeometry, data: ChunkGeometry): void {
   geometry.computeBoundingSphere()
 }
 
-/** Rebuilds a chunk's overhangs; a chunk without any hides its lip mesh rather than uploading empty buffers. */
-function updateLip(ground: Ground, c: Chunk, i: number, mesh: Mesh | null | undefined): void {
+function updateLip(ground: Ground, c: Chunk, i: number): void {
   const data = buildOverhangGeometry(ground.layers, i, DEFAULT_PALETTE, ground.surface)
-  const empty = data.indices.length === 0
-  if (!empty) setBuffers(c.lip, data)
-  if (mesh) mesh.visible = !empty
+  c.hasLip = data.indices.length > 0
+  if (c.hasLip) setBuffers(c.lip, data)
 }
 
 function updateInPlace(ground: Ground, c: Chunk, i: number): void {
@@ -61,9 +62,7 @@ export function TerrainMesh({ terrain }: { terrain: TerrainEditor }) {
       const data = ground.chunkGeometry(i, DEFAULT_PALETTE)
       const geometry = new BufferGeometry()
       setBuffers(geometry, data)
-      const c: Chunk = { data, geometry, sdf: ground.isSdfChunk(i), lip: new BufferGeometry() }
-      updateLip(ground, c, i, null)
-      return c
+      return { data, geometry, sdf: ground.isSdfChunk(i), lip: new BufferGeometry(), hasLip: false }
     })
   }, [terrain])
   useEffect(
@@ -75,6 +74,11 @@ export function TerrainMesh({ terrain }: { terrain: TerrainEditor }) {
     [chunks],
   )
   const lipMeshes = useRef<(Mesh | null)[]>([])
+  // Overhangs are built from scratch whenever the setting turns on, including for a fresh set of chunks.
+  const lipsWereOn = useRef(false)
+  useEffect(() => {
+    lipsWereOn.current = false
+  }, [chunks])
 
   const throttle = useMemo(() => new RemeshThrottle(0), [terrain])
   const hider = useMemo(() => new CaveHider(), [terrain])
@@ -100,7 +104,13 @@ export function TerrainMesh({ terrain }: { terrain: TerrainEditor }) {
     const hasCave = (i: number) => chunks[i]?.sdf || ground.isSdfChunk(i)
     const dirty = terrain.takeDirtyChunks('mesh')
     // Overhangs come from the heightmap alone, so they follow every change straight away, caves or not.
-    for (const i of dirty) if (chunks[i]) updateLip(ground, chunks[i], i, lipMeshes.current[i])
+    const lipsOn = settings.grassOverhangs
+    for (const i of overhangsToBuild(lipsOn, lipsWereOn.current, dirty, chunks.length)) if (chunks[i]) updateLip(ground, chunks[i], i)
+    lipsWereOn.current = lipsOn
+    chunks.forEach((c, i) => {
+      const m = lipMeshes.current[i]
+      if (m) m.visible = lipsOn && c.hasLip
+    })
     const { hide, flush, normal } = hider.split(terrain.stroking && settings.hideCavesWhileStroking, dirty, hasCave)
 
     // While a stroke ignores caves, its chunks are plain heightmap, updated in place.
@@ -158,7 +168,7 @@ export function TerrainMesh({ terrain }: { terrain: TerrainEditor }) {
           }}
           geometry={c.lip}
           material={material}
-          visible={c.lip.index !== null}
+          visible={false}
           castShadow
           receiveShadow
         />
