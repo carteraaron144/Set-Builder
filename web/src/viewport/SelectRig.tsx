@@ -1,6 +1,6 @@
 import { useFrame, useThree } from '@react-three/fiber'
 import { useEffect, useRef, useState } from 'react'
-import { Color, Matrix4, MeshBasicMaterial, Raycaster, Vector2, Vector3 } from 'three'
+import { BufferAttribute, BufferGeometry, Color, LineBasicMaterial, LineSegments, Matrix4, MeshBasicMaterial, Raycaster, Vector2, Vector3 } from 'three'
 import { useEditorStore, type Selection } from '../editor/editorStore'
 import { heightAt } from '../terrain/layers'
 import type { Scene } from '../scene/scene'
@@ -10,12 +10,20 @@ import type { Ray } from '../tools/caveInput'
 import { handleAxes, sameHandle, type HandleRef } from '../tools/handles'
 import { SelectInput } from '../tools/selectInput'
 import type { SplineResult } from '../tools/splineInput'
+import { centrelineSegments } from './featureLines'
 import { AXES, AXIS_COLORS, createGizmo, createHandles, HOVERED, LIFT } from './FeatureRig'
 
 const SPLINE_COLOR = new Color('#ffffff')
 const CAVE_COLOR = new Color('#ffb36b')
 const POND_COLOR = new Color('#7fd0ff')
 const MAX_HANDLES = 400
+
+function createLines(color: string): LineSegments {
+  const lines = new LineSegments(new BufferGeometry(), new LineBasicMaterial({ color, depthTest: false, transparent: true }))
+  lines.renderOrder = 10
+  lines.frustumCulled = false
+  return lines
+}
 
 const refOf = (s: Selection): HandleRef | null => (s === null ? null : s.kind === 'pond' ? { kind: 'pond', id: s.id } : s.point === null ? null : { kind: s.kind, id: s.id, point: s.point })
 const selectionOf = (r: HandleRef | null): Selection => (r === null ? null : r.kind === 'pond' ? { kind: 'pond', id: r.id } : { kind: r.kind, id: r.id, point: r.point })
@@ -30,6 +38,9 @@ export function SelectRig({ terrain, scene }: { terrain: TerrainEditor; scene: S
   const active = useEditorStore((s) => s.tool) === 'select'
   const [handles] = useState(createHandles)
   const [gizmo] = useState(createGizmo)
+  const [pathLines] = useState(() => createLines('#ffffff'))
+  const [caveLines] = useState(() => createLines('#ffb36b'))
+  const linesOf = useRef<unknown>(null)
   const inputRef = useRef<SelectInput | null>(null)
   const pendingRay = useRef<Ray | null>(null)
   const changed = useRef(true)
@@ -40,8 +51,12 @@ export function SelectRig({ terrain, scene }: { terrain: TerrainEditor; scene: S
       ;(handles.material as MeshBasicMaterial).dispose()
       gizmo.group.traverse((o) => (o as { geometry?: { dispose(): void } }).geometry?.dispose())
       Object.values(gizmo.materials).forEach((m) => m.dispose())
+      for (const l of [pathLines, caveLines]) {
+        l.geometry.dispose()
+        ;(l.material as LineBasicMaterial).dispose()
+      }
     },
-    [handles, gizmo],
+    [handles, gizmo, pathLines, caveLines],
   )
 
   useEffect(() => {
@@ -176,6 +191,17 @@ export function SelectRig({ terrain, scene }: { terrain: TerrainEditor; scene: S
       }
     }
 
+    // Path and cave centrelines, redrawn when the features change.
+    if (linesOf.current !== terrain.features) {
+      linesOf.current = terrain.features
+      const { paths, caves } = centrelineSegments(terrain.features, (x, z) => heightAt(terrain.ground.layers.heights, x, z) + LIFT)
+      for (const [lines, positions] of [[pathLines, paths], [caveLines, caves]] as const) {
+        lines.geometry.dispose()
+        lines.geometry = new BufferGeometry()
+        lines.geometry.setAttribute('position', new BufferAttribute(positions, 3))
+      }
+    }
+
     if (!changed.current) return
     changed.current = false
     const m = new Matrix4()
@@ -196,6 +222,8 @@ export function SelectRig({ terrain, scene }: { terrain: TerrainEditor; scene: S
   if (!active) return null
   return (
     <>
+      <primitive object={pathLines} />
+      <primitive object={caveLines} />
       <primitive object={handles} />
       <primitive object={gizmo.group} />
     </>
