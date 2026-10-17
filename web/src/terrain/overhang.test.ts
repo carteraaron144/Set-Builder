@@ -69,6 +69,24 @@ describe('buildOverhangGeometry', () => {
     expect(Math.max(...tinted)).toBeLessThanOrEqual(0.1)
   })
 
+  it('smooths the stair steps a grid-aligned cliff edge makes into an even outer edge', () => {
+    // The cliff edge steps out by one sample every 4 m along z.
+    const l = createFlatLayers(SIZE)
+    for (let j = 0; j < RES; j++) for (let i = 0; i <= EDGE_I + Math.floor(j / 8); i++) l.heights.data[j * RES + i] = TOP
+    const v = vertices(buildOverhangGeometry(l, 0, DEFAULT_PALETTE).positions)
+    // The outermost point in each 0.5 m band of z, away from the chunk's ends.
+    const outer = new Map<number, number>()
+    for (const [x, , z] of v) {
+      const band = Math.floor(z / HEIGHT_SPACING)
+      if (z > -28 && z < -4) outer.set(band, Math.max(outer.get(band) ?? -Infinity, x))
+    }
+    const bands = [...outer.keys()].sort((a, b) => a - b)
+    const jumps = bands.slice(1).map((b, k) => Math.abs(outer.get(b)! - outer.get(bands[k])!))
+    expect(bands.length).toBeGreaterThan(40)
+    // A raw step is a 0.5 m jump between neighbouring bands.
+    expect(Math.max(...jumps)).toBeLessThan(0.2)
+  })
+
   it('winds the top faces upwards so they are not culled', () => {
     const g = buildOverhangGeometry(cliff(), 0, DEFAULT_PALETTE)
     const p = g.positions
@@ -139,7 +157,7 @@ describe('buildOverhangGeometry', () => {
 })
 
 describe('chunksForHeightRect', () => {
-  it('reaches far enough for the overhang to see a cliff five samples away', () => {
-    expect(chunksForHeightRect({ x0: 69, z0: 10, x1: 80, z1: 20 }, 64)).toEqual([0, 1])
+  it('reaches far enough for the overhang to see a cliff eleven samples away', () => {
+    expect(chunksForHeightRect({ x0: 75, z0: 10, x1: 80, z1: 20 }, 64)).toEqual([0, 1])
   })
 })

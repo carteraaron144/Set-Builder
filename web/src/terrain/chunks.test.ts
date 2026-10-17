@@ -39,7 +39,7 @@ describe('chunk layout', () => {
     expect(chunksForHeightRect({ x0: 60, z0: 60, x1: 64, z1: 64 }, 64)).toEqual([0, 1, 2, 3])
     expect(chunksForHeightRect({ x0: 10, z0: 10, x1: 20, z1: 20 }, 64)).toEqual([0])
     expect(chunksForHeightRect({ x0: 0, z0: 0, x1: 128, z1: 128 }, 64)).toEqual([0, 1, 2, 3])
-    expect(chunksForHeightRect({ x0: 70, z0: 10, x1: 80, z1: 20 }, 64)).toEqual([1])
+    expect(chunksForHeightRect({ x0: 76, z0: 10, x1: 80, z1: 20 }, 64)).toEqual([1])
   })
 
   it('maps biome rects to chunks', () => {
