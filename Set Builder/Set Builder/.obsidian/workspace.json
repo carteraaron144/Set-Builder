@@ -20,8 +20,35 @@
               "icon": "lucide-file",
               "title": "Mood Board"
             }
+          },
+          {
+            "id": "2d44fcd22feb24d1",
+            "type": "leaf",
+            "state": {
+              "type": "release-notes",
+              "state": {
+                "currentVersion": "1.14.4"
+              },
+              "icon": "lucide-book-up",
+              "title": "Release Notes 1.14.4"
+            }
+          },
+          {
+            "id": "f7b45852e1038c74",
+            "type": "leaf",
+            "state": {
+              "type": "markdown",
+              "state": {
+                "file": "Cave solution.md",
+                "mode": "source",
+                "source": false
+              },
+              "icon": "lucide-file",
+              "title": "Cave solution"
+            }
           }
-        ]
+        ],
+        "currentTab": 2
       }
     ],
     "direction": "vertical"
@@ -188,8 +215,11 @@
       "bases:Create new base": false
     }
   },
-  "active": "afeee1a19097f789",
+  "active": "f7b45852e1038c74",
   "lastOpenFiles": [
+    "Cave solution.md",
+    "Mood Board.canvas",
+    "Mood Board.md",
     "Pasted image 20261015154226.png",
     "Screenshot 2026-10-15 at 3.37.37 PM.png",
     "Pasted image 20261015153446.png",
@@ -200,9 +230,6 @@
     "Pasted image 20261015153017.png",
     "Pasted image 20261015151927.png",
     "Screenshot 2026-10-15 at 3.16.18 PM.png",
-    "Pasted image 20261015151435.png",
-    "Mood Board.canvas",
-    "Mood Board.md",
     "Welcome.md"
   ]
 }

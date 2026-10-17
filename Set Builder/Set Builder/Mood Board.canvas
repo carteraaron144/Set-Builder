@@ -6,7 +6,20 @@
 		{"id":"94a91ccfefd6b6fa","type":"text","text":"# Outdoors","x":-210,"y":-500,"width":250,"height":60},
 		{"id":"fa36077ac4c41518","type":"text","text":"# Indoors","x":800,"y":-500,"width":250,"height":60},
 		{"id":"e8b73f21db1dbe04","type":"file","file":"Pasted image 20261015150352.png","x":620,"y":-398,"width":400,"height":287},
-		{"id":"c097aae7a36a645e","x":-67,"y":-140,"width":400,"height":340,"type":"file","file":"Pasted image 20261015150921.png"}
+		{"id":"c097aae7a36a645e","type":"file","file":"Pasted image 20261015150921.png","x":-67,"y":-140,"width":400,"height":340},
+		{"id":"90b7ee336be1b3c3","x":-67,"y":240,"width":400,"height":328,"type":"file","file":"Pasted image 20261015151053.png"},
+		{"id":"2d6a5626315b7722","x":-485,"y":360,"width":400,"height":258,"type":"file","file":"Pasted image 20261015151219.png"},
+		{"id":"ede8f5fd1949027a","x":-900,"y":-394,"width":400,"height":299,"type":"file","file":"Pasted image 20261015151435.png"},
+		{"id":"45cfbb88e3062278","x":-900,"y":-56,"width":400,"height":383,"type":"file","file":"Pasted image 20261015151927.png"},
+		{"id":"140e7d4b1c2f5dbc","x":-900,"y":360,"width":400,"height":295,"type":"file","file":"Pasted image 20261015153017.png"},
+		{"id":"6c778953a63386ee","x":-67,"y":618,"width":400,"height":387,"type":"file","file":"Pasted image 20261015153051.png"},
+		{"id":"68dfbc34e8b50079","x":-485,"y":655,"width":400,"height":225,"type":"file","file":"Pasted image 20261015153153.png"},
+		{"id":"061b766c40c4564e","x":-900,"y":700,"width":394,"height":400,"type":"file","file":"Pasted image 20261015153226.png"},
+		{"id":"acec19c328fbc386","x":-485,"y":920,"width":400,"height":399,"type":"file","file":"Pasted image 20261015153404.png"},
+		{"id":"0acf9ed8b82514a1","x":-67,"y":1040,"width":400,"height":395,"type":"file","file":"Pasted image 20261015153446.png"},
+		{"id":"1e4f637538d9e1c9","x":-857,"y":1140,"width":351,"height":400,"type":"file","file":"Pasted image 20261015154226.png"},
+		{"id":"8cce70cc39671da8","x":360,"y":360,"width":368,"height":400,"type":"file","file":"Screenshot 2026-10-15 at 3.16.18 PM.png"},
+		{"id":"03bf7339f42dd6c2","x":360,"y":807,"width":400,"height":397,"type":"file","file":"Screenshot 2026-10-15 at 3.37.37 PM.png"}
 	],
 	"edges":[]
 }
