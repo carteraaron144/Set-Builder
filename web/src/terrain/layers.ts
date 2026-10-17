@@ -1,4 +1,5 @@
 import type { SceneSize } from '../scene/scene'
+import { VolumeLayer } from './volume'
 
 export const HEIGHT_SPACING = 0.5
 export const BIOME_SPACING = 1
@@ -30,6 +31,7 @@ export interface BiomeMap {
 export interface TerrainLayers {
   heights: Heightmap
   biomes: BiomeMap
+  volume: VolumeLayer
 }
 
 /** Inclusive sample-index rectangle. */
@@ -48,6 +50,7 @@ export function createFlatLayers(size: SceneSize): TerrainLayers {
   return {
     heights: { size, resolution: hRes, data: new Float32Array(hRes * hRes) },
     biomes: { size, resolution: bRes, data: biomes },
+    volume: new VolumeLayer(size),
   }
 }
 
@@ -115,6 +118,7 @@ export function cloneLayers(l: TerrainLayers): TerrainLayers {
   return {
     heights: { ...l.heights, data: l.heights.data.slice() },
     biomes: { ...l.biomes, data: l.biomes.data.slice() },
+    volume: l.volume.clone(),
   }
 }
 
