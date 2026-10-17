@@ -17,13 +17,16 @@ const { groundBlend } = FEATURES.cave
  */
 export class CaveDistanceCache {
   private readonly data: Float64Array
+  private readonly ci: number
+  private readonly cj: number
+  private readonly yMin: number
+  private readonly levels: number
 
-  constructor(
-    private readonly ci: number,
-    private readonly cj: number,
-    private readonly yMin: number,
-    private readonly levels: number,
-  ) {
+  constructor(ci: number, cj: number, yMin: number, levels: number) {
+    this.ci = ci
+    this.cj = cj
+    this.yMin = yMin
+    this.levels = levels
     this.data = new Float64Array(CHUNK_VERTS * CHUNK_VERTS * levels).fill(NaN)
   }
 

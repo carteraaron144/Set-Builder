@@ -3,8 +3,8 @@ import { createFlatLayers } from '../terrain/layers'
 import { TerrainEditor } from '../terrain/terrainEditor'
 import { DEFAULT_PALETTE } from '../terrain/palette'
 import { buildCaveChunk, type CaveDistanceHolder } from './caveChunk'
+import { cavesReaching } from './caves'
 import { emptyFeatures, type Features } from './features'
-import { cavesReaching } from './ground'
 
 const features: Features = {
   ...emptyFeatures(),

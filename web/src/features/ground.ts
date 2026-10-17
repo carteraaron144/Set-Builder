@@ -1,24 +1,15 @@
-import { buildChunkGeometry, CHUNK_VERTS, chunkCount, type ChunkGeometry } from '../terrain/chunks'
+import { buildChunkGeometry, type ChunkGeometry } from '../terrain/chunks'
 import { BIOME_SPACING, clipRect, HEIGHT_SPACING, heightAt, type Rect, type TerrainLayers } from '../terrain/layers'
 import { DEFAULT_PALETTE, type TerrainPalette } from '../terrain/palette'
 import { raycastTerrain, type Vec3 } from '../terrain/pick'
-import { meshSdfChunk } from '../terrain/sdfChunk'
 import { buildCaveChunk } from './caveChunk'
-import { profileCave, smoothMin, type CaveProfile } from './caves'
+import { caveGlowChunk } from './caveGlow'
+import { cavesReaching, profileCave, smoothMin, type CaveProfile } from './caves'
 import { carveRect, exclusionRect, profileSpline, type SplineProfile, type SurfaceMap } from './carve'
 import { FEATURES, type Cave, type Features, type Spline } from './features'
-import type { SceneSize } from '../scene/scene'
 import { floodPond, type PondFill } from './ponds'
 
 const overlaps = (a: Rect, b: Rect) => a.x0 <= b.x1 && b.x0 <= a.x1 && a.z0 <= b.z1 && b.z0 <= a.z1
-
-/** The caves whose footprint meets chunk `chunk`'s height-sample square. */
-export function cavesReaching(caves: CaveProfile[], chunk: number, size: number): CaveProfile[] {
-  const n = chunkCount(size as SceneSize)
-  const cells = CHUNK_VERTS - 1
-  const square: Rect = { x0: (chunk % n) * cells, z0: Math.floor(chunk / n) * cells, x1: (chunk % n) * cells + cells, z1: Math.floor(chunk / n) * cells + cells }
-  return caves.filter((c) => c.footprint && overlaps(c.footprint, square))
-}
 
 const union = (a: Rect, b: Rect): Rect => ({
   x0: Math.min(a.x0, b.x0),
@@ -183,20 +174,7 @@ export class Ground {
 
   /** The caves alone, meshed inside chunk `chunk` (for a see-through glow); null if no cave reaches it. */
   caveGlowGeometry(chunk: number): { positions: Float32Array; indices: Uint32Array } | null {
-    const caves = this.cavesOf(chunk)
-    if (caves.length === 0) return null
-    const { size } = this.layers.heights
-    const half = size / 2
-    const y0 = Math.min(...caves.map((c) => c.bounds.y0))
-    const y1 = Math.max(...caves.map((c) => c.bounds.y1))
-    const inside = (i: number, j: number, y: number) => {
-      let d = Infinity
-      for (const c of caves) d = Math.min(d, c.sdf(-half + i * HEIGHT_SPACING, y, -half + j * HEIGHT_SPACING))
-      // Capped so far-off samples don't skew the interpolation on edges that cross the surface.
-      return -Math.min(d, 50)
-    }
-    const { positions, indices } = meshSdfChunk(size, chunk, inside, y0 - 1, y1 + 1)
-    return indices.length > 0 ? { positions, indices } : null
+    return caveGlowChunk(this.caves, chunk, this.layers.heights.size)
   }
 
   private cavesOf(chunk: number): CaveProfile[] {

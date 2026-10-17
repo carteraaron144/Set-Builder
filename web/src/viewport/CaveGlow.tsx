@@ -7,8 +7,8 @@ import { chunkCount } from '../terrain/chunks'
 import type { TerrainEditor } from '../terrain/terrainEditor'
 
 /** Sky blue, drawn over the terrain. */
-const GLOW_COLOR = '#87ceeb'
-const GLOW_OPACITY = 0.45
+export const GLOW_COLOR = '#87ceeb'
+export const GLOW_OPACITY = 0.45
 
 const sameCaves = (a: CaveProfile[], b: CaveProfile[]) => a.length === b.length && a.every((c, i) => c === b[i])
 

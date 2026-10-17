@@ -24,13 +24,16 @@ export class CaveMeshManager {
   private readonly flights = new Set<Flight>()
   private nextId = 1
   private disposed = false
+  private readonly run: CaveMeshRunner
+  private readonly build: (id: number, chunks: number[]) => CaveMeshRequest
+  private readonly workers: number
 
-  constructor(
-    private readonly run: CaveMeshRunner,
-    /** Copies the current ground into a request for these chunks. */
-    private readonly build: (id: number, chunks: number[]) => CaveMeshRequest,
-    private readonly workers = 1,
-  ) {}
+  /** `build` copies the current ground into a request for these chunks. */
+  constructor(run: CaveMeshRunner, build: (id: number, chunks: number[]) => CaveMeshRequest, workers = 1) {
+    this.run = run
+    this.build = build
+    this.workers = workers
+  }
 
   request(chunks: Iterable<number>): void {
     for (const c of chunks) this.pending.add(c)

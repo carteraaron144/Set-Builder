@@ -3,9 +3,9 @@ import { buildChunkGeometry, type ChunkGeometry } from '../terrain/chunks'
 import type { TerrainLayers } from '../terrain/layers'
 import { DEFAULT_PALETTE } from '../terrain/palette'
 import { buildCaveChunk, type CaveDistanceHolder } from './caveChunk'
-import { profileCave, type CaveProfile } from './caves'
+import { cavesReaching, profileCave, type CaveProfile } from './caves'
 import type { Cave } from './features'
-import { cavesReaching, type Ground } from './ground'
+import type { Ground } from './ground'
 
 /** Everything needed to mesh chunks off the main thread: copies of the carved layers and the caves as drawn. */
 export interface CaveMeshRequest {

@@ -1,4 +1,6 @@
+import { CHUNK_VERTS, chunkCount } from '../terrain/chunks'
 import { clipRect, HEIGHT_SPACING, type Heightmap, type Rect } from '../terrain/layers'
+import type { SceneSize } from '../scene/scene'
 import { FEATURES, type Cave, type CavePoint } from './features'
 
 const { floorRatio, blend, margin, sampleStep } = FEATURES.cave
@@ -163,4 +165,12 @@ export function profileCave(heights: Heightmap, cave: Cave): CaveProfile {
     heights.resolution,
   )
   return { cave, samples, bounds, footprint, sdf }
+}
+
+/** The caves whose footprint meets chunk `chunk`'s height-sample square. */
+export function cavesReaching(caves: CaveProfile[], chunk: number, size: number): CaveProfile[] {
+  const n = chunkCount(size as SceneSize)
+  const cells = CHUNK_VERTS - 1
+  const square: Rect = { x0: (chunk % n) * cells, z0: Math.floor(chunk / n) * cells, x1: (chunk % n) * cells + cells, z1: Math.floor(chunk / n) * cells + cells }
+  return caves.filter((c) => c.footprint && c.footprint.x0 <= square.x1 && square.x0 <= c.footprint.x1 && c.footprint.z0 <= square.z1 && square.z0 <= c.footprint.z1)
 }

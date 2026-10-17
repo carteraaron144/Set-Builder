@@ -20,6 +20,7 @@ import {
   Vector3,
 } from 'three'
 import { useEditorStore } from '../editor/editorStore'
+import { draftCaveGlow } from '../features/caveGlow'
 import { sampleCave } from '../features/caves'
 import type { CavePoint, SplinePoint } from '../features/features'
 import { sampleSpline } from '../features/spline'
@@ -30,6 +31,7 @@ import { gizmoLength, type Axis } from '../tools/axisGizmo'
 import { CaveInput, type Ray } from '../tools/caveInput'
 import { PondInput } from '../tools/pondInput'
 import { SplineInput, type SplineResult } from '../tools/splineInput'
+import { GLOW_COLOR, GLOW_OPACITY } from './CaveGlow'
 
 const MAX_HANDLES = 400
 export const LIFT = 0.15 // metres above the ground
@@ -96,6 +98,12 @@ function createCaveLines(): LineSegments {
   return lines
 }
 
+/** The sky-blue glow of the cave being drawn, one mesh per chunk it reaches. */
+function createDraftGlow(): { group: Group; material: MeshBasicMaterial } {
+  const material = new MeshBasicMaterial({ color: GLOW_COLOR, transparent: true, opacity: GLOW_OPACITY, depthTest: false, depthWrite: false })
+  return { group: new Group(), material }
+}
+
 /**
  * Wires clicks on the carved ground to the Path, River, Water and Cave tools: drawing, selecting and dragging
  * spline or cave points or pond levels, with handles drawn as spheres and the draft as a line. Cave handles and
@@ -110,6 +118,8 @@ export function FeatureRig({ terrain, scene }: { terrain: TerrainEditor; scene: 
   const [line] = useState(createLine)
   const [caveLines] = useState(createCaveLines)
   const [gizmo] = useState(createGizmo)
+  const [draftGlow] = useState(createDraftGlow)
+  const glowShown = useRef(0)
   const inputRef = useRef<SplineInput | PondInput | CaveInput | null>(null)
   const hover = useRef<SplinePoint | null>(null)
   const pendingDrag = useRef<SplinePoint | null>(null)
@@ -128,8 +138,10 @@ export function FeatureRig({ terrain, scene }: { terrain: TerrainEditor; scene: 
       ;(caveLines.material as LineBasicMaterial).dispose()
       gizmo.group.traverse((o) => (o as Mesh).geometry?.dispose())
       Object.values(gizmo.materials).forEach((m) => m.dispose())
+      draftGlow.group.children.forEach((m) => (m as Mesh).geometry.dispose())
+      draftGlow.material.dispose()
     },
-    [handles, line, caveLines, gizmo],
+    [handles, line, caveLines, gizmo, draftGlow],
   )
 
   useEffect(() => {
@@ -367,6 +379,27 @@ export function FeatureRig({ terrain, scene }: { terrain: TerrainEditor; scene: 
     }
   }
 
+  /** Meshes the cave being drawn as a glow each time a point is dropped (not on every pointer move: it is slow). */
+  const updateDraftGlow = () => {
+    const input = inputRef.current
+    const points = input instanceof CaveInput ? (input.draft ?? []) : []
+    if (points.length === glowShown.current) return
+    glowShown.current = points.length
+    for (const m of [...draftGlow.group.children] as Mesh[]) {
+      draftGlow.group.remove(m)
+      m.geometry.dispose()
+    }
+    for (const g of draftCaveGlow(terrain.ground.layers.heights, points)) {
+      const geometry = new BufferGeometry()
+      geometry.setAttribute('position', new BufferAttribute(g.positions, 3))
+      geometry.setIndex(new BufferAttribute(g.indices, 1))
+      const mesh = new Mesh(geometry, draftGlow.material)
+      mesh.renderOrder = 10
+      mesh.frustumCulled = false
+      draftGlow.group.add(mesh)
+    }
+  }
+
   useFrame(() => {
     const input = inputRef.current
     if (input instanceof SplineInput && (pendingDrag.current || pendingSplineRay.current)) {
@@ -391,6 +424,7 @@ export function FeatureRig({ terrain, scene }: { terrain: TerrainEditor; scene: 
       changed.current = true
     }
     updateGizmo()
+    updateDraftGlow()
     if (!changed.current) return
     changed.current = false
     const heights = terrain.ground.layers.heights
@@ -476,6 +510,7 @@ export function FeatureRig({ terrain, scene }: { terrain: TerrainEditor; scene: 
       <primitive object={line} />
       <primitive object={caveLines} />
       <primitive object={gizmo.group} />
+      <primitive object={draftGlow.group} />
     </>
   )
 }
