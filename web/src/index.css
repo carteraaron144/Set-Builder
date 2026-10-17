@@ -367,3 +367,13 @@ body,
   align-items: center;
   gap: 6px;
 }
+
+.fps-counter {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+  pointer-events: none;
+}

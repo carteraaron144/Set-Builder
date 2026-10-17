@@ -17,6 +17,7 @@ import {
   uploadSceneFile,
 } from './editor/sceneActions'
 import { installEditorShortcuts } from './editor/shortcuts'
+import { FpsCounter } from './editor/FpsCounter'
 import { FeaturePanel } from './editor/FeaturePanel'
 import { SettingsMenu } from './editor/SettingsMenu'
 import { ToolBar } from './editor/ToolBar'
@@ -98,6 +99,7 @@ export default function App() {
           <Viewport scene={scene} terrain={terrain} library={library} onBackend={setRenderBackend} />
         </ViewportErrorBoundary>
         <SettingsMenu />
+        <FpsCounter />
         <BrushPanel />
         <FeaturePanel />
         <ToolBar />
