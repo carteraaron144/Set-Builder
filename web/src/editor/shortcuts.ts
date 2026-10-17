@@ -18,7 +18,7 @@ export interface ShortcutHandlers {
 
 /**
  * Editor keys: Ctrl/Cmd+S (works in text fields), Ctrl/Cmd+Z, Ctrl/Cmd+Shift+Z, Ctrl+Y, [ and ], and Enter,
- * Escape, Backspace and Delete for feature tools (an unused Escape deselects the tool), and C for the Cave tool.
+ * Escape, Backspace and Delete for feature tools (an unused Escape deselects the tool), C for the Cave tool and 1 for the Select tool.
  */
 export function installEditorShortcuts(target: Window, h: ShortcutHandlers): () => void {
   const onKeyDown = (e: KeyboardEvent) => {
@@ -46,7 +46,7 @@ export function installEditorShortcuts(target: Window, h: ShortcutHandlers): () 
       else if (e.key === 'Escape') h.deselectTool()
     } else if (!mod && !e.altKey && key === 'c') {
       h.toggleTool('cave')
-    } else if (!mod && !e.altKey && key === 's') {
+    } else if (!mod && !e.altKey && key === '1') {
       h.toggleTool('select')
     }
   }

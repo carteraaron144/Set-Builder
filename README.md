@@ -30,7 +30,7 @@ Add `?renderer=webgl2` to the URL to force the WebGL2 backend (to check the fall
 | Orbit | Right-drag | Q / E |
 | Zoom | Wheel (toward the cursor) | R / F |
 | Tilt | Right-drag vertically | Page Up / Page Down |
-| Pick a tool | Bottom toolbar (Terrain, Paint, Path, River, Water, Caves) | C toggles Caves; Esc deselects |
+| Pick a tool | Bottom toolbar (Terrain, Paint, Path, River, Water, Caves) | C toggles Caves, 1 toggles Select; Esc deselects |
 | Apply the brush | Left-drag | |
 | Invert (lower, erase) | Alt-drag, or the panel's Invert toggle | |
 | Brush size | Size slider | `[` / `]` |

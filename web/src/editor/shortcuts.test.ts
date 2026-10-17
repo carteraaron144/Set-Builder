@@ -65,10 +65,11 @@ describe('editor shortcuts', () => {
     expect(h.deselectTool).toHaveBeenCalledTimes(1)
   })
 
-  it('toggles the Select tool with S, but not with a modifier (Cmd+S saves)', () => {
-    press({ key: 's' })
+  it('toggles the Select tool with 1, but not with a modifier, and leaves S to the camera', () => {
+    press({ key: '1' })
     expect(h.toggleTool).toHaveBeenCalledWith('select')
-    press({ key: 's', metaKey: true })
+    press({ key: '1', metaKey: true })
+    press({ key: 's' })
     expect(h.toggleTool).toHaveBeenCalledTimes(1)
   })
 
