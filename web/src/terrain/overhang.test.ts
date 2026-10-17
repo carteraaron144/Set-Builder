@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { SurfaceMap } from '../features/carve'
 import { chunksForHeightRect } from './chunks'
-import { createFlatLayers, HEIGHT_SPACING, type TerrainLayers } from './layers'
+import { createFlatLayers, HEIGHT_SPACING, heightAt, type TerrainLayers } from './layers'
 import { buildOverhangGeometry } from './overhang'
 import { DEFAULT_PALETTE } from './palette'
 
@@ -39,6 +39,19 @@ describe('buildOverhangGeometry', () => {
     expect(Math.min(...v.map((p) => p[1]))).toBeLessThan(TOP - 0.25)
     // Its back edge starts on the grass, behind the cliff edge.
     expect(Math.min(...v.map((p) => p[0]))).toBeLessThan(EDGE_X)
+  })
+
+  it('meets a sloping top tangentially, hugging the grass where it sits over it', () => {
+    // The top falls 20° towards the cliff edge, like the shoulder of a dome.
+    const l = cliff()
+    const grade = Math.tan((20 * Math.PI) / 180) * HEIGHT_SPACING
+    for (let j = 0; j < RES; j++) for (let i = 0; i <= EDGE_I; i++) l.heights.data[j * RES + i] = TOP + (EDGE_I - i) * grade
+    const behind = vertices(buildOverhangGeometry(l, 0, DEFAULT_PALETTE).positions).filter((p) => p[0] < EDGE_X - 0.05)
+    const gaps = behind.map((p) => p[1] - heightAt(l.heights, p[0], p[2]))
+    // Nothing pokes through the grass, and the top lies just under it rather than cutting in at an angle.
+    expect(Math.max(...gaps)).toBeLessThanOrEqual(1e-6)
+    expect(Math.max(...gaps)).toBeGreaterThan(-0.05)
+    expect(gaps.filter((g) => g > -0.05).length).toBeGreaterThan(behind.length / 3)
   })
 
   it('winds the top faces upwards so they are not culled', () => {

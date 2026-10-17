@@ -33,8 +33,14 @@ export const DEFAULT_OVERHANG: OverhangSettings = {
 const CELLS = CHUNK_VERTS - 1
 /** Sits the lip's top just under the grass so the two never fight. */
 const SINK = 0.02
-/** How much the outer edge droops at full size. */
-const DROOP = 0.08
+/** How much the outer edge droops at full size, below the line tangent to the grass. */
+const DROOP = 0.12
+/** How far behind the lip's back edge the grass's slope is measured. */
+const TANGENT_BACK = 0.5
+/** Points across the lip's top, from its back edge on the grass to its outer edge. */
+const TOP_POINTS = 5
+/** Vertices per rim point: the top, then the front's lower edge and the underside's back edge. */
+const PROFILE = TOP_POINTS + 2
 
 interface RimPoint {
   x: number
@@ -47,6 +53,9 @@ interface RimPoint {
   size: number
   drop: number
   color: RGB
+  /** Where the top starts on the grass, `inset` behind the rim: its height and the grass's slope there along d. */
+  top: number
+  tangent: number
 }
 
 const smoothstep = (edge0: number, edge1: number, x: number) => {
@@ -152,6 +161,11 @@ export function buildOverhangGeometry(
       }
       const size = smoothstep(o.cliffStart, o.cliffFull, cliff) * lerp(grass(i, j), grass(i2, j2))
       if (size > 0.05) {
+        // The top leaves the grass along its slope there (never rising), so the two meet without a crease.
+        const ax = x - dx * o.inset
+        const az = z - dz * o.inset
+        const top = heightAt(heights, ax, az)
+        const tangent = Math.min(0, (top - heightAt(heights, ax - dx * TANGENT_BACK, az - dz * TANGENT_BACK)) / TANGENT_BACK)
         terrainColorAt(l, i, j, flat, undefined, colA, 0)
         terrainColorAt(l, i2, j2, flat, undefined, colB, 0)
         point = {
@@ -164,6 +178,8 @@ export function buildOverhangGeometry(
           // Never hangs past the foot of a short step.
           drop: Math.min(o.dropMin + (o.dropMax - o.dropMin) * hash01(id), 0.6 * fall),
           color: [lerp(colA[0], colB[0]), lerp(colA[1], colB[1]), lerp(colA[2], colB[2])],
+          top,
+          tangent,
         }
       }
     }
@@ -175,20 +191,30 @@ export function buildOverhangGeometry(
   const colors: number[] = []
   const indices: number[] = []
   const under: RGB = [p.earth.color[0] * o.underShade, p.earth.color[1] * o.underShade, p.earth.color[2] * o.underShade]
-  /** Appends the four profile vertices of a rim point: top back, top front, front bottom, under back. */
+  /**
+   * Appends the profile vertices of a rim point, by distance back from the lip's back edge on the grass: the top
+   * as a curve leaving the grass tangentially and drooping towards the outer edge, then the front's lower edge and
+   * the underside's back edge, tucked into the ground under the grass.
+   */
   const profile = (r: RimPoint) => {
-    const s = r.size
-    const front = r.color.map((c) => c * o.frontShade)
-    const verts: [number, number, number, readonly number[]][] = [
-      [-o.inset, r.y - SINK, -o.inset, r.color],
-      [o.reach * s, r.y - SINK - DROOP * s, o.reach * s, r.color],
-      [o.reach * s * 0.75, r.y - r.drop * s, o.reach * s * 0.75, front],
-      [-o.inset, r.y - r.drop * s - o.inset, -o.inset, under],
-    ]
-    for (const [ox, y, oz, c] of verts) {
-      positions.push(r.x + r.dx * ox, y, r.z + r.dz * oz)
+    const size = r.size
+    const length = o.inset + o.reach * size
+    const curve = (s: number) => r.top - SINK + r.tangent * s - DROOP * size * (s / length) ** 2
+    const push = (s: number, y: number, c: readonly number[]) => {
+      positions.push(r.x + r.dx * (s - o.inset), y, r.z + r.dz * (s - o.inset))
       colors.push(c[0], c[1], c[2])
     }
+    for (let k = 0; k < TOP_POINTS; k++) {
+      const s = (length * k) / (TOP_POINTS - 1)
+      let y = curve(s)
+      // Over the grass (behind the rim) it stays under the surface even where the ground curves away.
+      if (s <= o.inset) y = Math.min(y, heightAt(heights, r.x + r.dx * (s - o.inset), r.z + r.dz * (s - o.inset)) - SINK)
+      push(s, y, r.color)
+    }
+    const sFront = o.inset + o.reach * size * 0.75
+    const yFront = curve(sFront) - r.drop * size
+    push(sFront, yFront, r.color.map((c) => c * o.frontShade))
+    push(0, yFront - o.inset, under)
   }
   const segment = (r0: RimPoint | null, r1: RimPoint | null) => {
     if (!r0 || !r1) return
@@ -199,10 +225,10 @@ export function buildOverhangGeometry(
     const base = positions.length / 3
     profile(r0)
     profile(r1)
-    for (let k = 0; k < 3; k++) {
+    for (let k = 0; k < PROFILE - 1; k++) {
       const a0 = base + k
       const b0 = a0 + 1
-      const a1 = base + 4 + k
+      const a1 = base + PROFILE + k
       const b1 = a1 + 1
       indices.push(a0, a1, b1, a0, b1, b0)
     }
