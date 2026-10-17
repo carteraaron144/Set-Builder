@@ -62,7 +62,7 @@ describe('buildWater', () => {
     const { g, water } = build({ splines: [river('r', 0)], ponds: [], caves: [] })
     const w = water[0]
     const { xs, zs } = g.profiles[0].samples
-    expect(w.positions.length / 3).toBe(2 * xs.length)
+    expect(w.positions.length / 3).toBeGreaterThanOrEqual(2 * xs.length)
     for (let k = 0; k < xs.length; k++) {
       const a = vertex(w, 2 * k)
       const b = vertex(w, 2 * k + 1)
@@ -74,10 +74,29 @@ describe('buildWater', () => {
     }
   })
 
+  it('rounds both river ends with a half-disc reaching half a width past the end sample', () => {
+    const { g, water } = build({ splines: [river('r', 0)], ponds: [], caves: [] })
+    const w = water[0]
+    const { xs, zs } = g.profiles[0].samples
+    const n = xs.length
+    for (const [k, other] of [[0, 1], [n - 1, n - 2]]) {
+      const dx = xs[k] - xs[other]
+      const dz = zs[k] - zs[other]
+      const len = Math.hypot(dx, dz)
+      let far = 0
+      for (let v = 0; v < w.positions.length / 3; v++) {
+        const [x, , z] = vertex(w, v)
+        far = Math.max(far, ((x - xs[k]) * dx + (z - zs[k]) * dz) / len)
+      }
+      expect(far).toBeCloseTo(1.5, 1)
+    }
+  })
+
   it('keeps river water non-increasing along the flow', () => {
     const { water } = build({ splines: [river('r', 0)], ponds: [], caves: [] })
     const w = water[0]
-    const ys = Array.from({ length: w.positions.length / 6 }, (_, k) => vertex(w, 2 * k)[1])
+    const samples = build({ splines: [river('r', 0)], ponds: [], caves: [] }).g.profiles[0].samples.xs.length
+    const ys = Array.from({ length: samples }, (_, k) => vertex(w, 2 * k)[1])
     const flow = ys[ys.length - 1] <= ys[0] ? ys : ys.slice().reverse()
     for (let k = 1; k < flow.length; k++) expect(flow[k]).toBeLessThanOrEqual(flow[k - 1])
     expect(flow[0]).toBeGreaterThan(flow[flow.length - 1])

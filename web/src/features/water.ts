@@ -34,7 +34,8 @@ export function buildWater(ground: Ground): WaterGeometry[] {
 function riverRibbon(p: SplineProfile): Omit<WaterGeometry, 'name'> {
   const { xs, zs } = p.samples
   const n = xs.length
-  const positions = new Float32Array(n * 6)
+  const ribbon = new Float32Array(n * 6)
+  const tangents = new Float32Array(n * 2)
   let tx = 1
   let tz = 0
   for (let k = 0; k < n; k++) {
@@ -49,7 +50,8 @@ function riverRibbon(p: SplineProfile): Omit<WaterGeometry, 'name'> {
     // (tz, −tx) is to the right of the flow; this order makes the triangles below face up.
     const y = p.water![k]
     const hw = p.samples.widths[k] / 2
-    positions.set([xs[k] - tz * hw, y, zs[k] + tx * hw, xs[k] + tz * hw, y, zs[k] - tx * hw], k * 6)
+    ribbon.set([xs[k] - tz * hw, y, zs[k] + tx * hw, xs[k] + tz * hw, y, zs[k] - tx * hw], k * 6)
+    tangents.set([tx, tz], k * 2)
   }
   const indices = new Uint32Array((n - 1) * 6)
   for (let k = 0; k + 1 < n; k++) {
@@ -57,8 +59,40 @@ function riverRibbon(p: SplineProfile): Omit<WaterGeometry, 'name'> {
     const b = a + 1
     indices.set([a, a + 2, b, b, a + 2, b + 2], k * 6)
   }
-  return { positions, indices }
+  // Round off both ends with a half-disc, matching the rounded end of the carved channel.
+  const positions: number[] = Array.from(ribbon)
+  const tris: number[] = Array.from(indices)
+  const cap = (k: number, sign: 1 | -1) => {
+    const hw = p.samples.widths[k] / 2
+    const y = p.water![k]
+    const ux = -sign * tangents[k * 2 + 1]
+    const uz = sign * tangents[k * 2]
+    const vx = sign * tangents[k * 2]
+    const vz = sign * tangents[k * 2 + 1]
+    const centre = positions.length / 3
+    positions.push(xs[k], y, zs[k])
+    // The end's first and last ribbon vertices are the arc's endpoints; the end at the start runs from its right edge to its left.
+    const first = sign > 0 ? 2 * k : 2 * k + 1
+    const last = sign > 0 ? 2 * k + 1 : 2 * k
+    let prev = first
+    for (let s = 1; s <= CAP_SEGMENTS; s++) {
+      let next = last
+      if (s < CAP_SEGMENTS) {
+        const a = (Math.PI * s) / CAP_SEGMENTS
+        next = positions.length / 3
+        positions.push(xs[k] + hw * (Math.cos(a) * ux + Math.sin(a) * vx), y, zs[k] + hw * (Math.cos(a) * uz + Math.sin(a) * vz))
+      }
+      tris.push(centre, prev, next)
+      prev = next
+    }
+  }
+  cap(n - 1, 1)
+  cap(0, -1)
+  return { positions: Float32Array.from(positions), indices: Uint32Array.from(tris) }
 }
+
+/** Half-disc segments at each end of a river. */
+const CAP_SEGMENTS = 8
 
 /** One flat quad per height cell with any corner flooded, at the pond's level; corners are shared. */
 function pondSheet(fill: PondFill, size: number, res: number): Omit<WaterGeometry, 'name'> {
