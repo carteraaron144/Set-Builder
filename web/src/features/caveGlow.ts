@@ -41,3 +41,30 @@ export function draftCaveGlow(heights: Heightmap, points: CavePoint[]): GlowMesh
   return out
 }
 
+
+/** The draft plus the point under the pointer (at the last point's depth, no chamber) as its next point; nothing without a draft. */
+export function draftGlowPoints(draft: CavePoint[], hover: { x: number; z: number } | null): CavePoint[] {
+  const last = draft[draft.length - 1]
+  return last && hover ? [...draft, { x: hover.x, y: last.y, z: hover.z, chamber: 0 }] : draft
+}
+
+/** Lets a rebuild through only when its key changed and `interval` ms have passed since the last one let through. */
+export class GlowThrottle {
+  private readonly interval: number
+  private key: string | null = null
+  private at = -Infinity
+
+  constructor(interval: number) {
+    this.interval = interval
+  }
+
+  due(key: string, now: number): boolean {
+    if (key === this.key || now - this.at < this.interval) return false
+    this.key = key
+    this.at = now
+    return true
+  }
+}
+
+/** Identifies a draft's shape, to a tenth of a metre, so tiny pointer moves don't rebuild the glow. */
+export const glowKey = (points: CavePoint[]): string => points.map((p) => `${p.x.toFixed(1)},${p.y.toFixed(1)},${p.z.toFixed(1)},${p.chamber}`).join(';')

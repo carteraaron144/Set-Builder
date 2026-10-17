@@ -20,7 +20,7 @@ import {
   Vector3,
 } from 'three'
 import { useEditorStore } from '../editor/editorStore'
-import { draftCaveGlow } from '../features/caveGlow'
+import { draftCaveGlow, draftGlowPoints, glowKey, GlowThrottle } from '../features/caveGlow'
 import { sampleCave } from '../features/caves'
 import type { CavePoint, SplinePoint } from '../features/features'
 import { sampleSpline } from '../features/spline'
@@ -119,7 +119,7 @@ export function FeatureRig({ terrain, scene }: { terrain: TerrainEditor; scene: 
   const [caveLines] = useState(createCaveLines)
   const [gizmo] = useState(createGizmo)
   const [draftGlow] = useState(createDraftGlow)
-  const glowShown = useRef(0)
+  const glowThrottle = useRef(new GlowThrottle(30))
   const inputRef = useRef<SplineInput | PondInput | CaveInput | null>(null)
   const hover = useRef<SplinePoint | null>(null)
   const pendingDrag = useRef<SplinePoint | null>(null)
@@ -379,12 +379,12 @@ export function FeatureRig({ terrain, scene }: { terrain: TerrainEditor; scene: 
     }
   }
 
-  /** Meshes the cave being drawn as a glow each time a point is dropped (not on every pointer move: it is slow). */
+  /** Meshes the cave being drawn, with the pointer's point as its end, at most every 30 ms (meshing is slow). */
   const updateDraftGlow = () => {
     const input = inputRef.current
-    const points = input instanceof CaveInput ? (input.draft ?? []) : []
-    if (points.length === glowShown.current) return
-    glowShown.current = points.length
+    const draft = input instanceof CaveInput ? (input.draft ?? []) : []
+    const points = draftGlowPoints(draft, hover.current)
+    if (!glowThrottle.current.due(glowKey(points), performance.now())) return
     for (const m of [...draftGlow.group.children] as Mesh[]) {
       draftGlow.group.remove(m)
       m.geometry.dispose()

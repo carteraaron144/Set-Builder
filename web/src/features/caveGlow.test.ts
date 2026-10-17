@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { createFlatLayers } from '../terrain/layers'
 import { TerrainEditor } from '../terrain/terrainEditor'
-import { draftCaveGlow } from './caveGlow'
+import { draftCaveGlow, draftGlowPoints, GlowThrottle } from './caveGlow'
 import { emptyFeatures, FEATURES, type CavePoint } from './features'
 
 const pt = (x: number, y: number, z: number): CavePoint => ({ x, y, z, chamber: 0 })
@@ -39,5 +39,35 @@ describe('draftCaveGlow', () => {
       expect(Array.from(g.positions)).toEqual(Array.from(want.positions))
       expect(Array.from(g.indices)).toEqual(Array.from(want.indices))
     }
+  })
+})
+
+describe('draftGlowPoints', () => {
+  it('is the draft alone with no pointer, and nothing with no draft', () => {
+    const d = [pt(0, -4, 0)]
+    expect(draftGlowPoints(d, null)).toEqual(d)
+    expect(draftGlowPoints([], { x: 5, z: 5 })).toEqual([])
+  })
+
+  it('adds the point under the pointer at the last point’s depth, with no chamber', () => {
+    const d = [pt(0, -4, 0), { ...pt(3, -6, 0), chamber: 5 }]
+    expect(draftGlowPoints(d, { x: 9, z: 2 })).toEqual([...d, { x: 9, y: -6, z: 2, chamber: 0 }])
+  })
+})
+
+describe('GlowThrottle', () => {
+  it('builds the first key at once and nothing for an unchanged key', () => {
+    const t = new GlowThrottle(30)
+    expect(t.due('a', 0)).toBe(true)
+    expect(t.due('a', 100)).toBe(false)
+  })
+
+  it('holds a change back until the interval has passed, then builds the latest key', () => {
+    const t = new GlowThrottle(30)
+    t.due('a', 1000)
+    expect(t.due('b', 1010)).toBe(false)
+    expect(t.due('c', 1029)).toBe(false)
+    expect(t.due('c', 1030)).toBe(true)
+    expect(t.due('c', 1100)).toBe(false)
   })
 })
