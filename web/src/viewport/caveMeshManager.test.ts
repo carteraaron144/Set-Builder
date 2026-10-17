@@ -9,8 +9,8 @@ const respond = (req: { id: number; chunks: number[] }): CaveMeshResponse => ({
 })
 
 function setup(workers = 1) {
-  const sent: { req: CaveMeshRequest; resolve(r: CaveMeshResponse): void; reject(e: unknown): void }[] = []
-  const run = (req: CaveMeshRequest) => new Promise<CaveMeshResponse>((resolve, reject) => sent.push({ req, resolve, reject }))
+  const sent: { req: CaveMeshRequest; slot: number; resolve(r: CaveMeshResponse): void; reject(e: unknown): void }[] = []
+  const run = (req: CaveMeshRequest, slot: number) => new Promise<CaveMeshResponse>((resolve, reject) => sent.push({ req, slot, resolve, reject }))
   const build = (id: number, chunks: number[]) => ({ id, chunks }) as CaveMeshRequest
   return { sent, manager: new CaveMeshManager(run, build, workers) }
 }
@@ -108,46 +108,72 @@ describe('CaveMeshManager', () => {
   })
 
   describe('with several workers', () => {
-    it('splits queued chunks across the idle workers', () => {
+    it('gives each worker the chunks it owns (chunk number modulo the worker count)', () => {
       const { sent, manager } = setup(2)
       manager.request([1, 2, 3, 4])
       manager.pump()
-      expect(sent.map((s) => s.req.chunks)).toEqual([
-        [1, 2],
-        [3, 4],
+      expect(sent.map((s) => [s.slot, s.req.chunks])).toEqual([
+        [0, [2, 4]],
+        [1, [1, 3]],
       ])
     })
 
-    it('uses fewer requests than workers when there are fewer chunks', () => {
+    it('always sends a chunk to the same worker, so its cave distance cache stays warm', async () => {
+      const { sent, manager } = setup(4)
+      for (let frame = 0; frame < 3; frame++) {
+        manager.request([6])
+        manager.pump()
+        sent[sent.length - 1].resolve(respond(sent[sent.length - 1].req))
+        await flush()
+      }
+      expect(sent.map((s) => s.slot)).toEqual([2, 2, 2])
+    })
+
+    it('uses fewer requests than workers when only some own chunks', () => {
       const { sent, manager } = setup(4)
       manager.request([5])
       manager.pump()
-      expect(sent.map((s) => s.req.chunks)).toEqual([[5]])
+      expect(sent.map((s) => [s.slot, s.req.chunks])).toEqual([[1, [5]]])
+    })
+
+    it('holds a chunk back while its worker is busy, and sends other workers’ chunks meanwhile', async () => {
+      const { sent, manager } = setup(2)
+      manager.request([1])
+      manager.pump()
+      manager.request([3, 2]) // 3 shares worker 1 with the chunk in flight; 2 does not
+      manager.pump()
+      expect(sent.map((s) => s.req.chunks)).toEqual([[1], [2]])
+      sent[0].resolve(respond(sent[0].req))
+      await flush()
+      manager.pump()
+      expect(sent.map((s) => s.req.chunks)).toEqual([[1], [2], [3]])
     })
 
     it('never has a chunk in two requests at once, so an older mesh cannot land after a newer one', async () => {
       const { sent, manager } = setup(2)
       manager.request([1])
       manager.pump()
-      manager.request([1, 2])
+      manager.request([1])
       manager.pump()
-      expect(sent.map((s) => s.req.chunks)).toEqual([[1], [2]])
+      expect(sent).toHaveLength(1)
       sent[0].resolve(respond(sent[0].req))
       await flush()
       manager.pump()
-      expect(sent.map((s) => s.req.chunks)).toEqual([[1], [2], [1]])
+      expect(sent.map((s) => s.req.chunks)).toEqual([[1], [1]])
     })
 
     it('delivers results from every request and requeues only the failed one', async () => {
       const { sent, manager } = setup(2)
       manager.request([1, 2])
       manager.pump()
-      sent[0].resolve(respond(sent[0].req))
-      sent[1].reject(new Error('boom'))
+      const ok = sent.find((s) => s.req.chunks[0] === 2)!
+      const bad = sent.find((s) => s.req.chunks[0] === 1)!
+      ok.resolve(respond(ok.req))
+      bad.reject(new Error('boom'))
       await flush()
-      expect(manager.take().map((r) => r.chunk)).toEqual([1])
+      expect(manager.take().map((r) => r.chunk)).toEqual([2])
       manager.pump()
-      expect(sent[2].req.chunks).toEqual([2])
+      expect(sent[2].req.chunks).toEqual([1])
     })
 
     it('discards across all requests in flight', async () => {

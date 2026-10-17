@@ -11,11 +11,44 @@ const FLOOR = hexToLinear(FEATURES.cave.floorColor)
 const { groundBlend } = FEATURES.cave
 
 /**
+ * Cave distances on one chunk's lattice, filled in as they are asked for. Cave distance doesn't depend on the
+ * heights, so it survives terrain strokes; callers drop it when the caves change. Distances outside the caves'
+ * vertical range are not stored.
+ */
+export class CaveDistanceCache {
+  private readonly data: Float64Array
+
+  constructor(
+    private readonly ci: number,
+    private readonly cj: number,
+    private readonly yMin: number,
+    private readonly levels: number,
+  ) {
+    this.data = new Float64Array(CHUNK_VERTS * CHUNK_VERTS * levels).fill(NaN)
+  }
+
+  /** The distance at lattice point (i, j) and height y (a multiple of the sample spacing), computed once. */
+  at(i: number, j: number, y: number, compute: (i: number, j: number, y: number) => number): number {
+    const k = Math.round((y - this.yMin) / HEIGHT_SPACING)
+    if (k < 0 || k >= this.levels) return compute(i, j, y)
+    const at = (k * CHUNK_VERTS + (j - this.cj)) * CHUNK_VERTS + (i - this.ci)
+    const known = this.data[at]
+    if (known === known) return known
+    return (this.data[at] = compute(i, j, y))
+  }
+}
+
+/** Where a chunk's cache lives between builds; empty until the first build fills it in. */
+export interface CaveDistanceHolder {
+  cache: CaveDistanceCache | null
+}
+
+/**
  * Meshes a chunk that caves reach from the density smooth-min(ground − y, cave distance), which rounds the rim
  * where a cave breaks the surface. Ground vertices take the
  * heightmap colours of their lattice edge; cave vertices are rock, or moss where they face up.
  */
-export function buildCaveChunk(layers: TerrainLayers, surface: SurfaceMap, caves: CaveProfile[], chunk: number, p: TerrainPalette): ChunkGeometry {
+export function buildCaveChunk(layers: TerrainLayers, surface: SurfaceMap, caves: CaveProfile[], chunk: number, p: TerrainPalette, holder?: CaveDistanceHolder): ChunkGeometry {
   const { size, resolution: res, data: h } = layers.heights
   const half = size / 2
   const n = chunkCount(size)
@@ -52,7 +85,20 @@ export function buildCaveChunk(layers: TerrainLayers, surface: SurfaceMap, caves
     }
     return [floor, ground]
   }
-  const mesh = meshSdfChunk(size, chunk, (i, j, y) => smoothMin(h[j * res + i] - y, caveAt(wx(i), y, wx(j)), groundBlend), lo - 1, hi + 1, band)
+  const caveAtLattice = (i: number, j: number, y: number) => caveAt(wx(i), y, wx(j))
+  let distances = holder?.cache ?? null
+  if (holder && !distances) {
+    let y0 = Infinity
+    let y1 = -Infinity
+    for (const c of caves) {
+      y0 = Math.min(y0, c.bounds.y0)
+      y1 = Math.max(y1, c.bounds.y1)
+    }
+    const yMin = Math.floor((y0 - 1) / HEIGHT_SPACING) * HEIGHT_SPACING
+    distances = holder.cache = new CaveDistanceCache(ci, cj, yMin, Math.ceil((y1 + 1 - yMin) / HEIGHT_SPACING) + 1)
+  }
+  const caveDistance = distances ? (i: number, j: number, y: number) => distances.at(i, j, y, caveAtLattice) : caveAtLattice
+  const mesh = meshSdfChunk(size, chunk, (i, j, y) => smoothMin(h[j * res + i] - y, caveDistance(i, j, y), groundBlend), lo - 1, hi + 1, band)
   const { positions, indices, edgeA, edgeB, t } = mesh
   const count = t.length
 

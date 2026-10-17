@@ -43,3 +43,27 @@ describe('meshChunks', () => {
     expect(req.heights).toEqual(g.layers.heights.data)
   })
 })
+
+describe('meshChunks caching across requests', () => {
+  it('stays equal to the ground’s mesh as heights and caves change between requests', () => {
+    const ed = new TerrainEditor(createFlatLayers(64), 7, features, () => {})
+    const g = ed.ground
+    const check = () => {
+      for (const r of meshChunks(caveMeshRequest(1, g, [0, 1, 2, 3])).results) {
+        const want = g.chunkGeometry(r.chunk, DEFAULT_PALETTE)
+        expect(Array.from(r.geometry.positions)).toEqual(Array.from(want.positions))
+        expect(Array.from(r.geometry.colors)).toEqual(Array.from(want.colors))
+      }
+    }
+    check()
+    check()
+    ed.beginStroke({ tool: 'terrain', mode: 'raise' }, { radius: 8, strength: 1, falloff: 0.5 }, { x: -6, z: 0 })
+    ed.dab({ x: -6, z: 0 }, 0.2, false)
+    ed.endStroke()
+    check()
+    const moved = structuredClone(features)
+    moved.caves[0].points[1].y += 3
+    ed.commitFeatures(moved)
+    check()
+  })
+})

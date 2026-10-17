@@ -2,7 +2,7 @@ import type { SceneSize } from '../scene/scene'
 import { buildChunkGeometry, type ChunkGeometry } from '../terrain/chunks'
 import type { TerrainLayers } from '../terrain/layers'
 import { DEFAULT_PALETTE } from '../terrain/palette'
-import { buildCaveChunk } from './caveChunk'
+import { buildCaveChunk, type CaveDistanceHolder } from './caveChunk'
 import { profileCave, type CaveProfile } from './caves'
 import type { Cave } from './features'
 import { cavesReaching, type Ground } from './ground'
@@ -61,6 +61,22 @@ function profilesFor(size: SceneSize, caves: Cave[], layers: TerrainLayers): Cav
   return out
 }
 
+// Cave distances per chunk, kept while the caves stay as they are. A chunk always meshes on the same worker, so
+// the cache stays warm through a stroke.
+let cacheKey = ''
+const holders = new Map<number, CaveDistanceHolder>()
+
+function holderFor(size: SceneSize, caves: Cave[], chunk: number): CaveDistanceHolder {
+  const key = `${size}:${JSON.stringify(caves)}`
+  if (key !== cacheKey) {
+    cacheKey = key
+    holders.clear()
+  }
+  let h = holders.get(chunk)
+  if (!h) holders.set(chunk, (h = { cache: null }))
+  return h
+}
+
 /** Meshes the requested chunks exactly as `Ground.chunkGeometry` would. */
 export function meshChunks(req: CaveMeshRequest): CaveMeshResponse {
   const layers: TerrainLayers = {
@@ -72,7 +88,7 @@ export function meshChunks(req: CaveMeshRequest): CaveMeshResponse {
   const results = req.chunks.map((chunk): CaveMeshResult => {
     const reaching = cavesReaching(caves, chunk, req.size)
     const sdf = reaching.length > 0
-    const geometry = sdf ? buildCaveChunk(layers, surface, reaching, chunk, DEFAULT_PALETTE) : buildChunkGeometry(layers, chunk, DEFAULT_PALETTE, surface)
+    const geometry = sdf ? buildCaveChunk(layers, surface, reaching, chunk, DEFAULT_PALETTE, holderFor(req.size, req.caves, chunk)) : buildChunkGeometry(layers, chunk, DEFAULT_PALETTE, surface)
     return { chunk, sdf, geometry }
   })
   return { id: req.id, results }

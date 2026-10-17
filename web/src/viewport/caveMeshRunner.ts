@@ -12,8 +12,7 @@ interface Slot {
 }
 
 /**
- * A runner backed by a pool of module Workers. A request goes to the least busy worker, so with at most `workers`
- * requests in flight each gets its own. Falls back to the calling thread without Workers.
+ * A runner backed by a pool of module Workers; a request goes to the worker its slot names. Falls back to the calling thread without Workers.
  */
 export function createCaveMeshRunner(count = defaultWorkerCount()): { run: CaveMeshRunner; workers: number; dispose(): void } {
   if (typeof Worker === 'undefined') return { run: (req) => Promise.resolve(meshChunks(req)), workers: 1, dispose: () => {} }
@@ -37,11 +36,11 @@ export function createCaveMeshRunner(count = defaultWorkerCount()): { run: CaveM
   })
   return {
     workers: count,
-    run: (req) =>
+    run: (req, slot) =>
       new Promise((resolve, reject) => {
-        const slot = slots.reduce((a, b) => (b.waiting.size < a.waiting.size ? b : a))
-        slot.waiting.set(req.id, { resolve, reject })
-        slot.worker.postMessage(req)
+        const s = slots[slot % count]
+        s.waiting.set(req.id, { resolve, reject })
+        s.worker.postMessage(req)
       }),
     dispose: () => slots.forEach((s) => s.worker.terminate()),
   }

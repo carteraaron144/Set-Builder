@@ -1,18 +1,20 @@
 import type { CaveMeshRequest, CaveMeshResponse, CaveMeshResult } from '../features/caveMesh'
 
 /** Runs a request: Worker-backed in the app, in-process where there is no Worker. */
-export type CaveMeshRunner = (req: CaveMeshRequest) => Promise<CaveMeshResponse>
+/** `slot` says which worker: the same chunk always goes to the same one, so its cave distance cache stays warm. */
+export type CaveMeshRunner = (req: CaveMeshRequest, slot: number) => Promise<CaveMeshResponse>
 
 interface Flight {
   id: number
+  slot: number
   chunks: Set<number>
   /** Chunks whose result must be thrown away because their mesh is being replaced another way. */
   discarded: Set<number>
 }
 
 /**
- * Meshes chunks that caves reach off the main thread, with up to `workers` requests in flight. A chunk is never in
- * two requests at once, so an older mesh can't land after a newer one. A chunk requested again after its request
+ * Meshes chunks that caves reach off the main thread. Each worker owns the chunks whose number is its slot modulo
+ * `workers` and has one request in flight at a time. A chunk is never in two requests at once, so an older mesh can't land after a newer one. A chunk requested again after its request
  * was sent still gets that result (a stroke re-dirties its chunks every frame, faster than a request returns) and is
  * then sent again; only `discard` drops results.
  */
@@ -45,22 +47,22 @@ export class CaveMeshManager {
     this.ready.splice(0, this.ready.length, ...keep)
   }
 
-  /** Call once per frame: shares the queued chunks that aren't already in flight among the idle workers. */
+  /** Call once per frame: sends each idle worker the queued chunks it owns, except those already in flight. */
   pump(): void {
-    if (this.disposed) return
-    const idle = this.workers - this.flights.size
-    if (idle <= 0) return
+    if (this.disposed || this.pending.size === 0) return
     const busy = new Set<number>()
-    for (const f of this.flights) for (const c of f.chunks) busy.add(c)
-    const sendable = [...this.pending].filter((c) => !busy.has(c)).sort((a, b) => a - b)
-    if (sendable.length === 0) return
-    const requests = Math.min(idle, sendable.length)
-    const per = Math.ceil(sendable.length / requests)
-    for (let r = 0; r < requests; r++) {
-      const chunks = sendable.slice(r * per, (r + 1) * per)
-      if (chunks.length === 0) break
+    const busySlots = new Set<number>()
+    for (const f of this.flights) {
+      busySlots.add(f.slot)
+      for (const c of f.chunks) busy.add(c)
+    }
+    const queued = [...this.pending].filter((c) => !busy.has(c)).sort((a, b) => a - b)
+    for (let slot = 0; slot < this.workers; slot++) {
+      if (busySlots.has(slot)) continue
+      const chunks = queued.filter((c) => c % this.workers === slot)
+      if (chunks.length === 0) continue
       for (const c of chunks) this.pending.delete(c)
-      this.send({ id: this.nextId++, chunks: new Set(chunks), discarded: new Set() })
+      this.send({ id: this.nextId++, slot, chunks: new Set(chunks), discarded: new Set() })
     }
   }
 
@@ -77,7 +79,7 @@ export class CaveMeshManager {
 
   private send(flight: Flight): void {
     this.flights.add(flight)
-    this.run(this.build(flight.id, [...flight.chunks])).then(
+    this.run(this.build(flight.id, [...flight.chunks]), flight.slot).then(
       (res) => {
         if (this.disposed || !this.flights.delete(flight)) return
         for (const r of res.results) if (!flight.discarded.has(r.chunk)) this.ready.push(r)
