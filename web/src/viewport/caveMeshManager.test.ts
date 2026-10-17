@@ -8,11 +8,11 @@ const respond = (req: { id: number; chunks: number[] }): CaveMeshResponse => ({
   results: req.chunks.map((chunk) => ({ chunk, sdf: true, geometry: geo })),
 })
 
-function setup() {
+function setup(workers = 1) {
   const sent: { req: CaveMeshRequest; resolve(r: CaveMeshResponse): void; reject(e: unknown): void }[] = []
   const run = (req: CaveMeshRequest) => new Promise<CaveMeshResponse>((resolve, reject) => sent.push({ req, resolve, reject }))
   const build = (id: number, chunks: number[]) => ({ id, chunks }) as CaveMeshRequest
-  return { sent, manager: new CaveMeshManager(run, build) }
+  return { sent, manager: new CaveMeshManager(run, build, workers) }
 }
 const flush = () => new Promise((r) => setTimeout(r, 0))
 
@@ -105,5 +105,59 @@ describe('CaveMeshManager', () => {
     expect(manager.take()).toEqual([])
     manager.pump()
     expect(sent).toHaveLength(2)
+  })
+
+  describe('with several workers', () => {
+    it('splits queued chunks across the idle workers', () => {
+      const { sent, manager } = setup(2)
+      manager.request([1, 2, 3, 4])
+      manager.pump()
+      expect(sent.map((s) => s.req.chunks)).toEqual([
+        [1, 2],
+        [3, 4],
+      ])
+    })
+
+    it('uses fewer requests than workers when there are fewer chunks', () => {
+      const { sent, manager } = setup(4)
+      manager.request([5])
+      manager.pump()
+      expect(sent.map((s) => s.req.chunks)).toEqual([[5]])
+    })
+
+    it('never has a chunk in two requests at once, so an older mesh cannot land after a newer one', async () => {
+      const { sent, manager } = setup(2)
+      manager.request([1])
+      manager.pump()
+      manager.request([1, 2])
+      manager.pump()
+      expect(sent.map((s) => s.req.chunks)).toEqual([[1], [2]])
+      sent[0].resolve(respond(sent[0].req))
+      await flush()
+      manager.pump()
+      expect(sent.map((s) => s.req.chunks)).toEqual([[1], [2], [1]])
+    })
+
+    it('delivers results from every request and requeues only the failed one', async () => {
+      const { sent, manager } = setup(2)
+      manager.request([1, 2])
+      manager.pump()
+      sent[0].resolve(respond(sent[0].req))
+      sent[1].reject(new Error('boom'))
+      await flush()
+      expect(manager.take().map((r) => r.chunk)).toEqual([1])
+      manager.pump()
+      expect(sent[2].req.chunks).toEqual([2])
+    })
+
+    it('discards across all requests in flight', async () => {
+      const { sent, manager } = setup(2)
+      manager.request([1, 2])
+      manager.pump()
+      manager.discard([2])
+      sent.forEach((s) => s.resolve(respond(s.req)))
+      await flush()
+      expect(manager.take().map((r) => r.chunk)).toEqual([1])
+    })
   })
 })

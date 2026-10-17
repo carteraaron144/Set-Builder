@@ -57,10 +57,10 @@ export function TerrainMesh({ terrain }: { terrain: TerrainEditor }) {
 
   const throttle = useMemo(() => new RemeshThrottle(0), [terrain])
   const hider = useMemo(() => new CaveHider(), [terrain])
-  // Chunks that caves reach are meshed in a Worker; their old mesh stays up until the new one arrives.
+  // Chunks that caves reach are meshed in a pool of Workers; their old mesh stays up until the new one arrives.
   const caveMesher = useMemo(() => {
     const runner = createCaveMeshRunner()
-    const manager = new CaveMeshManager(runner.run, (id, ids) => caveMeshRequest(id, terrain.ground, ids))
+    const manager = new CaveMeshManager(runner.run, (id, ids) => caveMeshRequest(id, terrain.ground, ids), runner.workers)
     return { manager, dispose: runner.dispose }
   }, [terrain])
   useEffect(
