@@ -12,15 +12,15 @@ export function chunkCount(size: SceneSize): number {
 }
 
 /**
- * Chunks whose vertices, slopes (±1 sample) or grass overhangs (which look up to 1 m past the rim: ±4 samples)
+ * Chunks whose vertices, slopes (±1 sample) or grass overhangs (which look up to 1.5 m around the rim: ±5 samples)
  * depend on samples in the rect. Sorted by index.
  */
 export function chunksForHeightRect(r: Rect, size: SceneSize): number[] {
   const n = chunkCount(size)
-  const x0 = r.x0 - 4
-  const z0 = r.z0 - 4
-  const x1 = r.x1 + 4
-  const z1 = r.z1 + 4
+  const x0 = r.x0 - 5
+  const z0 = r.z0 - 5
+  const x1 = r.x1 + 5
+  const z1 = r.z1 + 5
   const out: number[] = []
   for (let cz = 0; cz < n; cz++) {
     if (z0 > cz * CELLS + CELLS || z1 < cz * CELLS) continue

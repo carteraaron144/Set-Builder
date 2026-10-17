@@ -33,9 +33,9 @@ describe('buildOverhangGeometry', () => {
     const v = vertices(g.positions)
     expect(v.length).toBeGreaterThan(0)
     expect(g.colors.length).toBe(g.positions.length)
-    // Reaches out past the cliff edge, never pokes above the grass, and hangs down underneath.
+    // Reaches out past the cliff edge, lies only just over the grass, and hangs down underneath.
     expect(Math.max(...v.map((p) => p[0]))).toBeGreaterThan(EDGE_X + 0.2)
-    expect(Math.max(...v.map((p) => p[1]))).toBeLessThanOrEqual(TOP + 1e-6)
+    expect(Math.max(...v.map((p) => p[1]))).toBeLessThanOrEqual(TOP + 0.05 + 1e-6)
     expect(Math.min(...v.map((p) => p[1]))).toBeLessThan(TOP - 0.25)
     // Its back edge starts on the grass, behind the cliff edge.
     expect(Math.min(...v.map((p) => p[0]))).toBeLessThan(EDGE_X)
@@ -48,10 +48,25 @@ describe('buildOverhangGeometry', () => {
     for (let j = 0; j < RES; j++) for (let i = 0; i <= EDGE_I; i++) l.heights.data[j * RES + i] = TOP + (EDGE_I - i) * grade
     const behind = vertices(buildOverhangGeometry(l, 0, DEFAULT_PALETTE).positions).filter((p) => p[0] < EDGE_X - 0.05)
     const gaps = behind.map((p) => p[1] - heightAt(l.heights, p[0], p[2]))
-    // Nothing pokes through the grass, and the top lies just under it rather than cutting in at an angle.
-    expect(Math.max(...gaps)).toBeLessThanOrEqual(1e-6)
+    // The top follows the grass closely rather than cutting in at an angle.
+    expect(Math.max(...gaps)).toBeLessThanOrEqual(0.08)
     expect(Math.max(...gaps)).toBeGreaterThan(-0.05)
     expect(gaps.filter((g) => g > -0.05).length).toBeGreaterThan(behind.length / 3)
+  })
+
+  it('reaches back over every earth-tinted triangle to fully green grass, lying on top of the tint', () => {
+    // A dome shoulder steepening towards the cliff: samples 28 and 29 are past 30° and tinted with earth.
+    const l = cliff()
+    for (let j = 0; j < RES; j++)
+      for (let i = 24; i <= EDGE_I; i++) l.heights.data[j * RES + i] = TOP - 0.15 * ((i - 24) * HEIGHT_SPACING) ** 2
+    const lastGreenX = EDGE_X - 3 * HEIGHT_SPACING
+    const v = vertices(buildOverhangGeometry(l, 0, DEFAULT_PALETTE).positions)
+    expect(v.length).toBeGreaterThan(0)
+    expect(Math.min(...v.map((p) => p[0]))).toBeLessThanOrEqual(lastGreenX + 1e-6)
+    // Over the tinted band (sample 28 onwards, behind the edge) the top sits just above the terrain.
+    const tinted = v.filter((p) => p[0] > lastGreenX + 0.6 && p[0] < EDGE_X - 0.1).map((p) => p[1] - heightAt(l.heights, p[0], p[2]))
+    expect(Math.max(...tinted)).toBeGreaterThan(0.01)
+    expect(Math.max(...tinted)).toBeLessThanOrEqual(0.1)
   })
 
   it('winds the top faces upwards so they are not culled', () => {
@@ -124,7 +139,7 @@ describe('buildOverhangGeometry', () => {
 })
 
 describe('chunksForHeightRect', () => {
-  it('reaches far enough for the overhang to see a cliff four samples away', () => {
-    expect(chunksForHeightRect({ x0: 68, z0: 10, x1: 80, z1: 20 }, 64)).toEqual([0, 1])
+  it('reaches far enough for the overhang to see a cliff five samples away', () => {
+    expect(chunksForHeightRect({ x0: 69, z0: 10, x1: 80, z1: 20 }, 64)).toEqual([0, 1])
   })
 })

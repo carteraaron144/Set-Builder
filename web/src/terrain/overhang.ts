@@ -33,14 +33,25 @@ export const DEFAULT_OVERHANG: OverhangSettings = {
 const CELLS = CHUNK_VERTS - 1
 /** Sits the lip's top just under the grass so the two never fight. */
 const SINK = 0.02
+/** How far over the terrain the lip lies where it covers the earth-tinted grass behind the rim. */
+const LIFT = 0.05
+/** How far from its back edge the lip rises from under the grass to LIFT above it. */
+const RAMP = 0.15
 /** How much the outer edge droops at full size, below the line tangent to the grass. */
 const DROOP = 0.12
-/** How far behind the lip's back edge the grass's slope is measured. */
+/** How far behind the rim the grass's slope is measured. */
 const TANGENT_BACK = 0.5
-/** Points across the lip's top, from its back edge on the grass to its outer edge. */
-const TOP_POINTS = 5
+/**
+ * How far behind the rim the lip may reach to cover earth-tinted grass, and how far past the last tint it goes.
+ * With the bilinear and slope reads that is 5 samples: chunksForHeightRect allows no more.
+ */
+const MAX_BACK = 1.5
+const BACK_MARGIN = 0.15
+/** Points across the top: following the grass from the back edge to the rim, then out to the outer edge. */
+const BACK_POINTS = 6
+const OUT_POINTS = 3
 /** Vertices per rim point: the top, then the front's lower edge and the underside's back edge. */
-const PROFILE = TOP_POINTS + 2
+const PROFILE = BACK_POINTS + OUT_POINTS + 2
 
 interface RimPoint {
   x: number
@@ -53,8 +64,9 @@ interface RimPoint {
   size: number
   drop: number
   color: RGB
-  /** Where the top starts on the grass, `inset` behind the rim: its height and the grass's slope there along d. */
-  top: number
+  /** How far behind the rim the top starts: far enough to cover all the earth-tinted grass. */
+  back: number
+  /** The grass's slope along d just behind the rim (never rising), which the top leaves the rim along. */
   tangent: number
 }
 
@@ -104,6 +116,17 @@ export function buildOverhangGeometry(
     return [(h[j * res + ir] - h[j * res + il]) / ((ir - il) * HEIGHT_SPACING), (h[ju * res + i] - h[jd * res + i]) / ((ju - jd) * HEIGHT_SPACING)]
   }
   const slope = (i: number, j: number) => Math.atan(Math.hypot(...gradient(i, j)))
+  /** How much earth tints the terrain colour at world (x, z), as the mesh's colours interpolate it. */
+  const earthAtWorld = (x: number, z: number) => {
+    const fi = Math.min(res - 1, Math.max(0, (x + half) / HEIGHT_SPACING))
+    const fj = Math.min(res - 1, Math.max(0, (z + half) / HEIGHT_SPACING))
+    const i0 = Math.min(res - 2, Math.floor(fi))
+    const j0 = Math.min(res - 2, Math.floor(fj))
+    const tx = fi - i0
+    const tz = fj - j0
+    const e = (i: number, j: number) => smoothstep(p.earth.start, p.earth.full, slope(i, j))
+    return (e(i0, j0) * (1 - tx) + e(i0 + 1, j0) * tx) * (1 - tz) + (e(i0, j0 + 1) * (1 - tx) + e(i0 + 1, j0 + 1) * tx) * tz
+  }
   /** 1 on grass, 0 on the rocky biome or a painted surface. */
   const grass = (i: number, j: number) => {
     const bRes = biomes.resolution
@@ -161,11 +184,11 @@ export function buildOverhangGeometry(
       }
       const size = smoothstep(o.cliffStart, o.cliffFull, cliff) * lerp(grass(i, j), grass(i2, j2))
       if (size > 0.05) {
-        // The top leaves the grass along its slope there (never rising), so the two meet without a crease.
-        const ax = x - dx * o.inset
-        const az = z - dz * o.inset
-        const top = heightAt(heights, ax, az)
-        const tangent = Math.min(0, (top - heightAt(heights, ax - dx * TANGENT_BACK, az - dz * TANGENT_BACK)) / TANGENT_BACK)
+        // Back from the rim until the terrain is fully green, so no earth tint shows behind the lip.
+        let back = o.inset
+        for (let b = 0; b < MAX_BACK; b += 0.05)
+          if (earthAtWorld(x - dx * b, z - dz * b) > 0.005) back = Math.max(back, Math.min(MAX_BACK, b + BACK_MARGIN))
+        const tangent = Math.min(0, (y - heightAt(heights, x - dx * TANGENT_BACK, z - dz * TANGENT_BACK)) / TANGENT_BACK)
         terrainColorAt(l, i, j, flat, undefined, colA, 0)
         terrainColorAt(l, i2, j2, flat, undefined, colB, 0)
         point = {
@@ -178,7 +201,7 @@ export function buildOverhangGeometry(
           // Never hangs past the foot of a short step.
           drop: Math.min(o.dropMin + (o.dropMax - o.dropMin) * hash01(id), 0.6 * fall),
           color: [lerp(colA[0], colB[0]), lerp(colA[1], colB[1]), lerp(colA[2], colB[2])],
-          top,
+          back,
           tangent,
         }
       }
@@ -192,29 +215,29 @@ export function buildOverhangGeometry(
   const indices: number[] = []
   const under: RGB = [p.earth.color[0] * o.underShade, p.earth.color[1] * o.underShade, p.earth.color[2] * o.underShade]
   /**
-   * Appends the profile vertices of a rim point, by distance back from the lip's back edge on the grass: the top
-   * as a curve leaving the grass tangentially and drooping towards the outer edge, then the front's lower edge and
-   * the underside's back edge, tucked into the ground under the grass.
+   * Appends the profile vertices of a rim point, from the lip's back edge on fully green grass: the top following
+   * the grass just above it across the earth-tinted band to the rim, then leaving the rim along the grass's slope
+   * and drooping to the outer edge; then the front's lower edge and the underside's back edge, tucked into the
+   * ground under the grass.
    */
   const profile = (r: RimPoint) => {
     const size = r.size
-    const length = o.inset + o.reach * size
-    const curve = (s: number) => r.top - SINK + r.tangent * s - DROOP * size * (s / length) ** 2
+    const reach = o.reach * size
+    const curve = (s: number) => r.y + LIFT + r.tangent * s - DROOP * size * (s / reach) ** 2
+    /** Pushes the vertex at distance s out from the rim (negative: behind it). */
     const push = (s: number, y: number, c: readonly number[]) => {
-      positions.push(r.x + r.dx * (s - o.inset), y, r.z + r.dz * (s - o.inset))
+      positions.push(r.x + r.dx * s, y, r.z + r.dz * s)
       colors.push(c[0], c[1], c[2])
     }
-    for (let k = 0; k < TOP_POINTS; k++) {
-      const s = (length * k) / (TOP_POINTS - 1)
-      let y = curve(s)
-      // Over the grass (behind the rim) it stays under the surface even where the ground curves away.
-      if (s <= o.inset) y = Math.min(y, heightAt(heights, r.x + r.dx * (s - o.inset), r.z + r.dz * (s - o.inset)) - SINK)
-      push(s, y, r.color)
+    for (let k = 0; k < BACK_POINTS; k++) {
+      const s = -r.back * (1 - k / (BACK_POINTS - 1))
+      const lift = -SINK + (SINK + LIFT) * Math.min(1, (s + r.back) / RAMP)
+      push(s, heightAt(heights, r.x + r.dx * s, r.z + r.dz * s) + lift, r.color)
     }
-    const sFront = o.inset + o.reach * size * 0.75
-    const yFront = curve(sFront) - r.drop * size
-    push(sFront, yFront, r.color.map((c) => c * o.frontShade))
-    push(0, yFront - o.inset, under)
+    for (let k = 1; k <= OUT_POINTS; k++) push((reach * k) / OUT_POINTS, curve((reach * k) / OUT_POINTS), r.color)
+    const yFront = curve(reach * 0.75) - r.drop * size
+    push(reach * 0.75, yFront, r.color.map((c) => c * o.frontShade))
+    push(-r.back, yFront - o.inset, under)
   }
   const segment = (r0: RimPoint | null, r1: RimPoint | null) => {
     if (!r0 || !r1) return
