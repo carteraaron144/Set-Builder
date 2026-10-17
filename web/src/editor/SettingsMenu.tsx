@@ -8,6 +8,8 @@ export function SettingsMenu() {
   const setDelay = useEditorStore((s) => s.setCaveRemeshDelay)
   const hideCaves = useEditorStore((s) => s.hideCavesWhileStroking)
   const setHideCaves = useEditorStore((s) => s.setHideCavesWhileStroking)
+  const showGrid = useEditorStore((s) => s.showChunkGrid)
+  const setShowGrid = useEditorStore((s) => s.setShowChunkGrid)
 
   return (
     <div className="settings-menu">
@@ -35,6 +37,11 @@ export function SettingsMenu() {
             Ignore caves while sculpting
           </label>
           <p className="panel-hint">Draws the terrain without its caves during a stroke, then remeshes them all at once on release.</p>
+          <label className="settings-check">
+            <input type="checkbox" checked={showGrid} onChange={(e) => setShowGrid(e.target.checked)} />
+            Show chunk grid
+          </label>
+          <p className="panel-hint">Draws the 32 m chunk boundaries on the ground.</p>
         </div>
       )}
     </div>

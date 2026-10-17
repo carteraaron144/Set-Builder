@@ -11,6 +11,7 @@ import { SelectRig } from './SelectRig'
 import { BrushRig } from './BrushRig'
 import { browserSupport, detectSupport, forcedBackend, type RenderBackend } from './renderBackend'
 import { ScatterMesh } from './ScatterMesh'
+import { ChunkGrid } from './ChunkGrid'
 import { TerrainMesh } from './TerrainMesh'
 import { WaterMesh } from './WaterMesh'
 
@@ -76,6 +77,7 @@ export function Viewport({
         <BrushRig terrain={terrain} />
         <TerrainMesh terrain={terrain} />
         <CaveGlow terrain={terrain} />
+        <ChunkGrid terrain={terrain} />
         <WaterMesh terrain={terrain} />
         <FeatureRig terrain={terrain} scene={scene} />
         <SelectRig terrain={terrain} scene={scene} />

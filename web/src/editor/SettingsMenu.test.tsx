@@ -44,3 +44,15 @@ describe('SettingsMenu', () => {
     expect(useEditorStore.getState().hideCavesWhileStroking).toBe(true)
   })
 })
+
+describe('SettingsMenu chunk grid', () => {
+  it('toggles the chunk grid, off by default', async () => {
+    expect(useEditorStore.getState().showChunkGrid).toBe(false)
+    render(<SettingsMenu />)
+    await userEvent.click(screen.getByRole('button', { name: 'Settings' }))
+    await userEvent.click(screen.getByLabelText('Show chunk grid'))
+    expect(useEditorStore.getState().showChunkGrid).toBe(true)
+    await userEvent.click(screen.getByLabelText('Show chunk grid'))
+    expect(useEditorStore.getState().showChunkGrid).toBe(false)
+  })
+})
