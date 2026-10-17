@@ -7,9 +7,18 @@ import { buildCaveChunk } from './caveChunk'
 import { profileCave, smoothMin, type CaveProfile } from './caves'
 import { carveRect, exclusionRect, profileSpline, type SplineProfile, type SurfaceMap } from './carve'
 import { FEATURES, type Cave, type Features, type Spline } from './features'
+import type { SceneSize } from '../scene/scene'
 import { floodPond, type PondFill } from './ponds'
 
 const overlaps = (a: Rect, b: Rect) => a.x0 <= b.x1 && b.x0 <= a.x1 && a.z0 <= b.z1 && b.z0 <= a.z1
+
+/** The caves whose footprint meets chunk `chunk`'s height-sample square. */
+export function cavesReaching(caves: CaveProfile[], chunk: number, size: number): CaveProfile[] {
+  const n = chunkCount(size as SceneSize)
+  const cells = CHUNK_VERTS - 1
+  const square: Rect = { x0: (chunk % n) * cells, z0: Math.floor(chunk / n) * cells, x1: (chunk % n) * cells + cells, z1: Math.floor(chunk / n) * cells + cells }
+  return caves.filter((c) => c.footprint && overlaps(c.footprint, square))
+}
 
 const union = (a: Rect, b: Rect): Rect => ({
   x0: Math.min(a.x0, b.x0),
@@ -191,10 +200,7 @@ export class Ground {
   }
 
   private cavesOf(chunk: number): CaveProfile[] {
-    const n = chunkCount(this.base.heights.size)
-    const cells = CHUNK_VERTS - 1
-    const square: Rect = { x0: (chunk % n) * cells, z0: Math.floor(chunk / n) * cells, x1: (chunk % n) * cells + cells, z1: Math.floor(chunk / n) * cells + cells }
-    return this.caves.filter((c) => c.footprint && overlaps(c.footprint, square))
+    return cavesReaching(this.caves, chunk, this.base.heights.size)
   }
 
   /** Marks biome samples where a cave comes within the clear margin of the ground surface. */

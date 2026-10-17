@@ -8,6 +8,9 @@ import type { TerrainEditor } from '../terrain/terrainEditor'
 import { useEditorStore } from '../editor/editorStore'
 import { CaveHider } from './caveHider'
 import { RemeshThrottle } from './remeshThrottle'
+import { caveMeshRequest } from '../features/caveMesh'
+import { CaveMeshManager } from './caveMeshManager'
+import { createCaveMeshRunner } from './caveMeshRunner'
 
 interface Chunk {
   data: ChunkGeometry
@@ -54,6 +57,19 @@ export function TerrainMesh({ terrain }: { terrain: TerrainEditor }) {
 
   const throttle = useMemo(() => new RemeshThrottle(0), [terrain])
   const hider = useMemo(() => new CaveHider(), [terrain])
+  // Chunks that caves reach are meshed in a Worker; their old mesh stays up until the new one arrives.
+  const caveMesher = useMemo(() => {
+    const runner = createCaveMeshRunner()
+    const manager = new CaveMeshManager(runner.run, (id, ids) => caveMeshRequest(id, terrain.ground, ids))
+    return { manager, dispose: runner.dispose }
+  }, [terrain])
+  useEffect(
+    () => () => {
+      caveMesher.manager.dispose()
+      caveMesher.dispose()
+    },
+    [caveMesher],
+  )
 
   useFrame(() => {
     const { ground } = terrain
@@ -64,6 +80,7 @@ export function TerrainMesh({ terrain }: { terrain: TerrainEditor }) {
     const { hide, flush, normal } = hider.split(terrain.stroking && settings.hideCavesWhileStroking, terrain.takeDirtyChunks('mesh'), hasCave)
 
     // While a stroke ignores caves, its chunks are plain heightmap, updated in place.
+    caveMesher.manager.discard(hide)
     for (const i of hide) {
       const c = chunks[i]
       if (!c) continue
@@ -77,13 +94,7 @@ export function TerrainMesh({ terrain }: { terrain: TerrainEditor }) {
     }
 
     // When it ends, every chunk it hid gets its caves back in the same frame.
-    for (const i of flush) {
-      const c = chunks[i]
-      if (!c) continue
-      c.data = ground.chunkGeometry(i, DEFAULT_PALETTE)
-      c.sdf = ground.isSdfChunk(i)
-      setBuffers(c.geometry, c.data)
-    }
+    caveMesher.manager.request(flush.filter((i) => chunks[i]))
 
     for (const i of normal) {
       const c = chunks[i]
@@ -95,17 +106,18 @@ export function TerrainMesh({ terrain }: { terrain: TerrainEditor }) {
       }
       updateInPlace(ground, c, i)
     }
-    const start = performance.now()
-    const due = throttle.take(start)
-    for (const i of due) {
-      const c = chunks[i]
-      c.data = ground.chunkGeometry(i, DEFAULT_PALETTE)
-      c.sdf = ground.isSdfChunk(i)
-      setBuffers(c.geometry, c.data)
-    }
+    const due = throttle.take(performance.now())
     if (due.length > 0) {
-      const end = performance.now()
-      throttle.finished(end, end - start)
+      caveMesher.manager.request(due)
+      throttle.finished(performance.now(), 0)
+    }
+    caveMesher.manager.pump()
+    for (const r of caveMesher.manager.take()) {
+      const c = chunks[r.chunk]
+      if (!c) continue
+      c.data = r.geometry
+      c.sdf = r.sdf
+      setBuffers(c.geometry, c.data)
     }
   })
 
