@@ -5,7 +5,8 @@ export type CaveMeshRunner = (req: CaveMeshRequest) => Promise<CaveMeshResponse>
 
 /**
  * Meshes chunks that caves reach off the main thread. Keeps at most one request in flight and drops results for
- * chunks requested again after theirs was sent (they are sent again).
+ * A chunk requested again after its request was sent still gets that result (a stroke re-dirties its chunks every
+ * frame, faster than a request returns) and is then sent again; only `discard` drops results.
  */
 export class CaveMeshManager {
   private readonly pending = new Set<number>()
@@ -21,10 +22,7 @@ export class CaveMeshManager {
   ) {}
 
   request(chunks: Iterable<number>): void {
-    for (const c of chunks) {
-      this.pending.add(c)
-      if (this.inFlight?.chunks.has(c)) this.inFlight.dirtied.add(c)
-    }
+    for (const c of chunks) this.pending.add(c)
   }
 
   /** Forgets any queued, in-flight or arrived mesh for these chunks (their mesh is being replaced another way). */

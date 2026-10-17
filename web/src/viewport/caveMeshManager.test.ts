@@ -43,16 +43,29 @@ describe('CaveMeshManager', () => {
     expect(sent[1].req.chunks).toEqual([2])
   })
 
-  it('drops a result for a chunk dirtied after its request was sent, and asks for it again', async () => {
+  it('still delivers a chunk dirtied again after its request was sent, then sends it again', async () => {
     const { sent, manager } = setup()
     manager.request([1, 2])
     manager.pump()
-    manager.request([2])
+    manager.request([2]) // a stroke dirties it every frame, faster than a request returns
     sent[0].resolve(respond(sent[0].req))
     await flush()
-    expect(manager.take().map((r) => r.chunk)).toEqual([1])
+    expect(manager.take().map((r) => r.chunk)).toEqual([1, 2])
     manager.pump()
     expect(sent[1].req.chunks).toEqual([2])
+  })
+
+  it('keeps delivering during a long run of re-dirtying', async () => {
+    const { sent, manager } = setup()
+    let delivered = 0
+    for (let frame = 0; frame < 5; frame++) {
+      manager.request([7])
+      manager.pump()
+      sent[sent.length - 1].resolve(respond(sent[sent.length - 1].req))
+      await flush()
+      delivered += manager.take().length
+    }
+    expect(delivered).toBe(5)
   })
 
   it('requeues the chunks of a failed request', async () => {
