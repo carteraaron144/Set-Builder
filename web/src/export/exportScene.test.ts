@@ -10,6 +10,7 @@ import { scatterChunk, type Instance } from '../scatter/scatter'
 import { paint, sculpt } from '../terrain/brush'
 import { buildChunkGeometry } from '../terrain/chunks'
 import { cloneLayers, createFlatLayers } from '../terrain/layers'
+import { buildOverhangGeometry, withOverhang } from '../terrain/overhang'
 import { DEFAULT_PALETTE } from '../terrain/palette'
 import { loadBasicsLibrary } from '../test/basicsLibrary'
 import { buildExportScene, EXPORT_DEFAULTS, type ExportOptions } from './exportScene'
@@ -55,7 +56,9 @@ describe('buildExportScene', () => {
     const chunks = terrain.children.filter((c) => !c.name.endsWith('-col')).map((c) => c.name)
     expect(chunks).toEqual(['terrain_c0_0', 'terrain_c1_0', 'terrain_c0_1', 'terrain_c1_1'])
     const c3 = root.getObjectByName('terrain_c1_1') as Mesh
-    expect([...c3.geometry.getAttribute('position').array]).toEqual([...buildChunkGeometry(layers, 3, DEFAULT_PALETTE).positions])
+    expect([...c3.geometry.getAttribute('position').array]).toEqual([
+      ...withOverhang(buildChunkGeometry(layers, 3, DEFAULT_PALETTE), buildOverhangGeometry(layers, 3, DEFAULT_PALETTE)).positions,
+    ])
     expect(c3.geometry.getAttribute('color')).toBeDefined()
     for (const m of meshes(root)) expect(m.geometry.getAttribute('normal'), m.name).toBeUndefined()
   })
@@ -85,7 +88,8 @@ describe('buildExportScene', () => {
     const names = meshes(root).map((m) => m.name)
     expect(names).toEqual(['chunk_0_0', 'chunk_1_0', 'chunk_0_1', 'chunk_1_1'])
     const total = meshes(root).reduce((a, m) => a + tris(m.geometry), 0)
-    const terrainTris = 4 * 64 * 64 * 2
+    const lipTris = [0, 1, 2, 3].reduce((a, c) => a + buildOverhangGeometry(layers, c, DEFAULT_PALETTE).indices.length / 3, 0)
+    const terrainTris = 4 * 64 * 64 * 2 + lipTris
     const elementTris = exported(false).reduce((a, i) => a + library.assets.get(rules.rules[i.rule].asset)!.parts.reduce((b, p) => b + tris(p.geometry), 0), 0)
     expect(total).toBe(terrainTris + elementTris)
     for (const m of meshes(root)) {
@@ -203,5 +207,15 @@ describe('buildExportScene with caves', () => {
     const merged = buildExportScene({ scene, layers, ground, instancesByRule, rules, library }, { ...EXPORT_DEFAULTS, grouping: 'merged' })
     const sceneCol = merged.getObjectByName('scene-col') as Mesh
     expect(sceneCol.geometry.getAttribute('position').count).toBeGreaterThan(3 * 33 * 33 + expected.positions.length / 3 - 1)
+  })
+
+  it('includes the grass overhangs in the terrain chunks', () => {
+    const cliff = createFlatLayers(64)
+    for (let j = 0; j < 129; j++) for (let i = 0; i <= 30; i++) cliff.heights.data[j * 129 + i] = 10
+    const lip = buildOverhangGeometry(cliff, 0, DEFAULT_PALETTE)
+    expect(lip.positions.length).toBeGreaterThan(0)
+    const root = buildExportScene({ scene, layers: cliff, instancesByRule: rules.rules.map(() => []), rules, library }, { ...EXPORT_DEFAULTS, collision: false })
+    const t = root.getObjectByName('terrain_c0_0') as Mesh
+    expect(t.geometry.getAttribute('position').count).toBe(65 * 65 + lip.positions.length / 3)
   })
 })

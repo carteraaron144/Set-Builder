@@ -8,5 +8,16 @@
   "slopeBands": {
     "earth": { "color": "#8a6a48", "startDeg": 30, "fullDeg": 35 },
     "rock": { "color": "#8a8178", "startDeg": 60, "fullDeg": 65 }
+  },
+  "overhang": {
+    "cliffStartDeg": 40,
+    "cliffFullDeg": 55,
+    "probe": 1,
+    "inset": 0.3,
+    "reach": 0.8,
+    "dropMin": 0.3,
+    "dropMax": 0.75,
+    "frontShade": 0.75,
+    "underShade": 0.45
   }
 }

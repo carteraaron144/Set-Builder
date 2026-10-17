@@ -21,6 +21,7 @@ import type { ScatterRules } from '../scatter/rules'
 import type { Instance } from '../scatter/scatter'
 import { buildChunkGeometry, CHUNK_SIZE, chunkCount, type ChunkGeometry } from '../terrain/chunks'
 import type { TerrainLayers } from '../terrain/layers'
+import { buildOverhangGeometry, withOverhang } from '../terrain/overhang'
 import { DEFAULT_PALETTE } from '../terrain/palette'
 
 export type ExportGrouping = 'element' | 'chunk' | 'merged'
@@ -133,8 +134,12 @@ export function buildExportScene(input: ExportInput, o: ExportOptions): Group {
   const { scene, instancesByRule, rules, library, ground } = input
   const layers = ground?.layers ?? input.layers
   const surface = ground?.surface
-  /** A chunk's render geometry, from the density field where caves reach. */
-  const chunkGeometry = (c: number) => (ground ? ground.chunkGeometry(c, DEFAULT_PALETTE) : buildChunkGeometry(layers, c, DEFAULT_PALETTE, surface))
+  /** A chunk's render geometry, from the density field where caves reach, with its grass overhangs. */
+  const chunkGeometry = (c: number) =>
+    withOverhang(
+      ground ? ground.chunkGeometry(c, DEFAULT_PALETTE) : buildChunkGeometry(layers, c, DEFAULT_PALETTE, surface),
+      buildOverhangGeometry(layers, c, DEFAULT_PALETTE, surface),
+    )
   const chunkCollision = (c: number, render?: ChunkGeometry) =>
     ground?.isSdfChunk(c) ? sdfCollision(render ?? chunkGeometry(c)) : terrainCollision(layers, c)
   const water = ground ? waterMeshes(ground) : []
