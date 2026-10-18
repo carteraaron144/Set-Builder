@@ -102,16 +102,18 @@ function spillHeight(h: Heightmap, seed: number, limit: number): number {
 
 /**
  * Floods from the pond's seed: every height sample 4-connected to the seed and strictly below the effective
- * level. A fill that would reach the scene edge is capped at its spill height less the spill gap.
+ * level. A fill that would reach the scene edge is capped at its spill height less the spill gap. Samples where
+ * `solidAt` says rock stands at the water level (sculpted material over the ground) act as walls.
  */
-export function floodPond(h: Heightmap, pond: Pond): PondFill {
+export function floodPond(h: Heightmap, pond: Pond, solidAt?: (i: number, j: number, y: number) => boolean): PondFill {
   const res = h.resolution
   const mask = new Uint8Array(res * res)
   const seed = sampleIndex(h, pond.seed)
   const spill = spillHeight(h, seed, pond.level)
   const capped = spill < pond.level
   const level = capped ? spill - FEATURES.pond.spillGap : pond.level
-  if (!(h.data[seed] < level)) return { mask, level, capped, bounds: null }
+  const blocked = (n: number) => solidAt !== undefined && solidAt(n % res, Math.floor(n / res), level)
+  if (!(h.data[seed] < level) || blocked(seed)) return { mask, level, capped, bounds: null }
   const bounds: Rect = { x0: res, z0: res, x1: -1, z1: -1 }
   const stack = [seed]
   mask[seed] = 1
@@ -124,7 +126,7 @@ export function floodPond(h: Heightmap, pond: Pond): PondFill {
     bounds.z0 = Math.min(bounds.z0, z)
     bounds.z1 = Math.max(bounds.z1, z)
     const visit = (n: number) => {
-      if (!mask[n] && h.data[n] < level) {
+      if (!mask[n] && h.data[n] < level && !blocked(n)) {
         mask[n] = 1
         stack.push(n)
       }

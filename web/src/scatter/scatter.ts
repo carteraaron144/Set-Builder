@@ -6,6 +6,17 @@ import type { Vec3 } from '../terrain/pick'
 import { hash4, unit } from './hash'
 import type { ScatterRule, ScatterRules } from './rules'
 
+/**
+ * The scatter surfaces of one SDF chunk: its 65×65 lattice (from height sample ci, cj), up to `levels` of them per
+ * column, top first, NaN where a column has fewer. y[(level·65 + lj)·65 + li].
+ */
+export interface SurfaceLevels {
+  ci: number
+  cj: number
+  levels: number
+  y: Float32Array
+}
+
 /** The layers scatter reads: the sculpted volume reaches it through `levels`. */
 export type ScatterLayers = Pick<TerrainLayers, 'heights' | 'biomes'>
 
@@ -15,6 +26,8 @@ export interface ScatterInputs {
   rules: ScatterRules
   /** 1 m grid like the biome map; non-zero means no scatter. Null in M2. */
   exclusion: Uint8Array | null
+  /** Surfaces over and under sculpted bricks, per chunk; chunks without an entry stand on the heightmap. */
+  levels?: Map<number, SurfaceLevels>
 }
 
 /** What scatter needs to know about an asset ("<packId>/<assetId>"). */
@@ -48,6 +61,9 @@ const DEG = Math.PI / 180
 const FOOT_BAND = 0.75 // metres: face candidates must sit this close to their wall foot
 const MARCH_STEP = 0.1 // metres, horizontal
 const MARCH_MAX = 16 // metres, horizontal each way
+const LEVEL_SPAN = 3 // metres: neighbours on surfaces this far apart in height don't crowd each other
+const LEVEL_CORNER_RANGE = 1 // metres: a level whose lattice corners differ more than this is skipped
+const MAX_LEVELS = 4
 const SALT = { x: 1, z: 2, priority: 3, keep: 4, yaw: 5, tilt: 6, tiltDir: 7, scale: 8, length: 9 }
 
 export function assetInfoFrom(packs: { packId: string; manifest: PackManifest }[]): Record<string, AssetInfo> {
@@ -175,10 +191,17 @@ function basisQuat(xa: Vec3, ya: Vec3, za: Vec3): Quat {
 interface Candidate {
   x: number
   z: number
+  /** The height it stands at: its level's, or the heightmap's. */
+  y: number
+  /** Stands on a level of a sculpted chunk rather than on the heightmap. */
+  levelled: boolean
   priority: number
   /** Face rules: the wall measured from the candidate. */
   wall?: NonNullable<ReturnType<typeof measureWall>>
 }
+
+/** On different surfaces: levelled candidates 3 m or more apart in height don't crowd each other. */
+const apart = (a: Candidate, b: Candidate) => (a.levelled || b.levelled) && Math.abs(a.y - b.y) >= LEVEL_SPAN
 
 /** Evaluates candidates lazily and caches them for one scatter call. */
 class Field {
@@ -194,6 +217,29 @@ class Field {
     this.half = inp.layers.heights.size / 2
   }
 
+  /** Height and slope (radians) of a sculpted chunk's level at a point, or null if the level is missing there. */
+  private onLevel(lv: SurfaceLevels, level: number, x: number, z: number): { y: number; slope: number } | null {
+    if (level >= lv.levels) return null
+    const V = 65
+    const gx = (x + this.half) / 0.5 - lv.ci
+    const gz = (z + this.half) / 0.5 - lv.cj
+    const i0 = Math.min(V - 2, Math.max(0, Math.floor(gx)))
+    const j0 = Math.min(V - 2, Math.max(0, Math.floor(gz)))
+    const fx = gx - i0
+    const fz = gz - j0
+    const at = (i: number, j: number) => lv.y[(level * V + j) * V + i]
+    const y00 = at(i0, j0)
+    const y10 = at(i0 + 1, j0)
+    const y01 = at(i0, j0 + 1)
+    const y11 = at(i0 + 1, j0 + 1)
+    const lo = Math.min(y00, y10, y01, y11)
+    const hi = Math.max(y00, y10, y01, y11)
+    if (!(hi - lo <= LEVEL_CORNER_RANGE)) return null // also false for NaN
+    const dx = (y10 + y11 - y00 - y01) / (2 * 0.5)
+    const dz = (y01 + y11 - y00 - y10) / (2 * 0.5)
+    return { y: (y00 * (1 - fx) + y10 * fx) * (1 - fz) + (y01 * (1 - fx) + y11 * fx) * fz, slope: Math.atan(Math.hypot(dx, dz)) }
+  }
+
   cellSize(rule: number) {
     return this.cell[rule]
   }
@@ -203,19 +249,20 @@ class Field {
   }
 
   /** The surviving candidate of a rule's cell, or null. */
-  survivor(rule: number, ci: number, cj: number): Candidate | null {
+  survivor(rule: number, ci: number, cj: number, level = 0): Candidate | null {
     // Numeric key: cells stay within ±2048 of the origin for any scene size and spacing in use.
-    const k = (rule * 4096 + ci + 2048) * 4096 + cj + 2048
+    const k = ((rule * 4096 + ci + 2048) * 4096 + cj + 2048) * MAX_LEVELS + level
     const hit = this.cache.get(k)
     if (hit !== undefined) return hit
-    const c = this.evaluate(rule, ci, cj)
+    const c = this.evaluate(rule, ci, cj, level)
     this.cache.set(k, c)
     return c
   }
 
-  private evaluate(rule: number, ci: number, cj: number): Candidate | null {
-    const { seed, layers, exclusion, rules } = this.inp
+  private evaluate(rule: number, ci: number, cj: number, level: number): Candidate | null {
+    const { seed, layers, exclusion, rules, levels } = this.inp
     const r = rules.rules[rule]
+    if (level > 0 && (!levels || r.placement === 'face')) return null
     const cs = this.cell[rule]
     const h = (salt: number) => hash4(seed, rule, ci, cj, salt)
     const x = (ci + unit(h(SALT.x))) * cs
@@ -229,17 +276,28 @@ class Field {
     }
     const weight = r.biome === 'any' ? 1 : biomeWeight(layers.biomes, x, z, BIOME_IDS.indexOf(r.biome))
     if (unit(h(SALT.keep)) >= r.density * weight * cs * cs) return null
-    const y = heightAt(layers.heights, x, z)
+    // Ground rules in a sculpted chunk stand on its levels; everything else on the heightmap.
+    const lv = r.placement === 'ground' ? levels?.get(this.chunkOf(x, z)) : undefined
+    if (level > 0 && !lv) return null
+    const onLevel = lv ? this.onLevel(lv, level, x, z) : null
+    if (lv && !onLevel) return null
+    const y = onLevel ? onLevel.y : heightAt(layers.heights, x, z)
     if (y < r.minHeight || y > r.maxHeight) return null
     const priority = h(SALT.priority)
     if (r.placement === 'ground') {
-      if (slopeAt(layers.heights, x, z) > r.maxSlopeDeg * DEG) return null
-      return { x, z, priority }
+      if ((onLevel ? onLevel.slope : slopeAt(layers.heights, x, z)) > r.maxSlopeDeg * DEG) return null
+      return { x, z, y, levelled: onLevel !== null, priority }
     }
     const wall = measureWall(layers.heights, x, z, r.minSlopeDeg!)
     if (!wall || wall.height < r.minWallHeight!) return null
     if (Math.hypot(wall.foot.x - x, wall.foot.z - z) > FOOT_BAND) return null
-    return { x, z, priority, wall }
+    return { x, z, y, levelled: false, priority, wall }
+  }
+
+  private chunkOf(x: number, z: number): number {
+    const n = chunkCount(this.inp.layers.heights.size as SceneSize)
+    const at = (v: number) => Math.min(n - 1, Math.max(0, Math.floor((v + this.half) / CHUNK_SIZE)))
+    return at(z) * n + at(x)
   }
 
   /** Accepted: no higher-priority surviving neighbour within spacing, none of an earlier blocking rule within footprints. */
@@ -251,9 +309,11 @@ class Field {
     for (let dj = -reach; dj <= reach; dj++)
       for (let di = -reach; di <= reach; di++) {
         if (!di && !dj) continue
-        const o = this.survivor(rule, ci + di, cj + dj)
-        if (!o || Math.hypot(o.x - c.x, o.z - c.z) >= r.minSpacing) continue
-        if (o.priority > c.priority || (o.priority === c.priority && (cj + dj) * 1e6 + ci + di > cj * 1e6 + ci)) return false
+        for (let lvl = 0; lvl < MAX_LEVELS; lvl++) {
+          const o = this.survivor(rule, ci + di, cj + dj, lvl)
+          if (!o || Math.hypot(o.x - c.x, o.z - c.z) >= r.minSpacing || apart(o, c)) continue
+          if (o.priority > c.priority || (o.priority === c.priority && (cj + dj) * 1e6 + ci + di > cj * 1e6 + ci)) return false
+        }
       }
     const fp = this.footprint(rule)
     for (let e = 0; e < rule; e++) {
@@ -267,8 +327,10 @@ class Field {
       const j1 = Math.floor((c.z + reachDist) / ocs)
       for (let j = j0; j <= j1; j++)
         for (let i = i0; i <= i1; i++) {
-          const o = this.survivor(e, i, j)
-          if (o && Math.hypot(o.x - c.x, o.z - c.z) < reachDist) return false
+          for (let lvl = 0; lvl < MAX_LEVELS; lvl++) {
+            const o = this.survivor(e, i, j, lvl)
+            if (o && Math.hypot(o.x - c.x, o.z - c.z) < reachDist && !apart(o, c)) return false
+          }
         }
     }
     return true
@@ -283,7 +345,7 @@ class Field {
       const yaw = axisAngle({ x: 0, y: 1, z: 0 }, h(SALT.yaw) * Math.PI * 2)
       const dir = h(SALT.tiltDir) * Math.PI * 2
       const tilt = axisAngle({ x: Math.cos(dir), y: 0, z: Math.sin(dir) }, h(SALT.tilt) * r.maxTiltDeg * DEG)
-      return { rule, x: c.x, y: heightAt(layers.heights, c.x, c.z), z: c.z, quat: quatMul(tilt, yaw), scale: [s, s, s], priority: c.priority }
+      return { rule, x: c.x, y: c.levelled ? c.y : heightAt(layers.heights, c.x, c.z), z: c.z, quat: quatMul(tilt, yaw), scale: [s, s, s], priority: c.priority }
     }
     const w = c.wall!
     const sink = r.sinkDepth!
@@ -321,9 +383,11 @@ export function scatterRect(inp: ScatterInputs, x0: number, z0: number, x1: numb
     const cs = field.cellSize(ri)
     for (let cj = Math.floor(z0 / cs); cj <= Math.floor(z1 / cs); cj++)
       for (let ci = Math.floor(x0 / cs); ci <= Math.floor(x1 / cs); ci++) {
-        const c = field.survivor(ri, ci, cj)
-        if (!c || c.x < x0 || c.x >= x1 || c.z < z0 || c.z >= z1) continue
-        if (field.accepted(ri, ci, cj, c)) out.push(field.instance(ri, ci, cj, c))
+        for (let lvl = 0; lvl < MAX_LEVELS; lvl++) {
+          const c = field.survivor(ri, ci, cj, lvl)
+          if (!c || c.x < x0 || c.x >= x1 || c.z < z0 || c.z >= z1) continue
+          if (field.accepted(ri, ci, cj, c)) out.push(field.instance(ri, ci, cj, c))
+        }
       }
   })
   return out

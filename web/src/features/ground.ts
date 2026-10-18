@@ -8,6 +8,7 @@ import { caveGlowChunk } from './caveGlow'
 import { cavesReaching, profileCave, smoothMin, type CaveProfile } from './caves'
 import { carveRect, exclusionRect, profileSpline, SURFACE, type SplineProfile, type SurfaceMap } from './carve'
 import { FEATURES, type Cave, type Features, type Spline } from './features'
+import type { SurfaceLevels } from '../scatter/scatter'
 import { floodPond, type PondFill } from './ponds'
 
 const overlaps = (a: Rect, b: Rect) => a.x0 <= b.x1 && b.x0 <= a.x1 && a.z0 <= b.z1 && b.z0 <= a.z1
@@ -34,6 +35,9 @@ function sameFill(a: PondFill, b: PondFill): boolean {
 
 /** A path's corridor is air from its surface up to this height (metres). */
 const PATH_CLEARANCE = 4
+/** A scatter site needs this much air above it (metres), and a column keeps at most this many of them. */
+const SCATTER_HEADROOM = 3
+const MAX_LEVELS = 4
 
 /**
  * The terrain as shown: the sculpted layers with paths and rivers carved in, surface colours, flooded ponds,
@@ -127,7 +131,8 @@ export class Ground {
     const underCave = rects.some((r) => caves.some((c) => c.footprint && overlaps(c.footprint, r)))
     if (cavesChanged || underCave) this.clearAroundCaves()
 
-    const ponds = features.ponds.map((p) => floodPond(this.layers.heights, p))
+    const solidAt = this.layers.volume.count > 0 ? (i: number, j: number, y: number) => this.latticeDensity(i, j, y) > 0 : undefined
+    const ponds = features.ponds.map((p) => floodPond(this.layers.heights, p, solidAt))
     let pondsChanged = ponds.length !== this.ponds.length
     for (let i = 0; i < Math.max(ponds.length, this.ponds.length); i++) {
       const a = this.ponds[i]
@@ -178,6 +183,77 @@ export class Ground {
     const j = Math.min(resolution - 1, Math.max(0, Math.round((z + size / 2) / HEIGHT_SPACING)))
     if (this.surface.kind[j * resolution + i] !== SURFACE.none) s = Math.min(s, -Math.min(y - h, h + PATH_CLEARANCE - y))
     return smoothMin(s, cave, FEATURES.cave.groundBlend)
+  }
+
+  /** The ground and bricks (caves ignored) at height sample (i, j) and a world y on the 0.5 m grid, as `density` reads them there. */
+  private latticeDensity(i: number, j: number, y: number): number {
+    const { resolution, data } = this.layers.heights
+    const ground = data[j * resolution + i]
+    const ab = this.volumeAB
+    this.layers.volume.sampleLattice(i, j, y, ab)
+    if (ab.a === -VALUE_LIMIT && ab.k === -VALUE_LIMIT) return ground - y
+    let s = Math.min(Math.max(ground - y, ab.a), -ab.k)
+    if (this.surface.kind[j * resolution + i] !== SURFACE.none) s = Math.min(s, -Math.min(y - ground, ground + PATH_CLEARANCE - y))
+    return s
+  }
+
+  /**
+   * Every surface with 3 m of air above it, at the 65×65 lattice of an SDF chunk reached by sculpted bricks (up to
+   * 4 per column, top first); null for other chunks, whose only surface is the heightmap.
+   */
+  surfaceLevels(chunk: number): SurfaceLevels | null {
+    if (!this.hasVolume(chunk)) return null
+    const { size, resolution: res, data: h } = this.layers.heights
+    const n = chunkCount(size)
+    const ci = (chunk % n) * (CHUNK_VERTS - 1)
+    const cj = Math.floor(chunk / n) * (CHUNK_VERTS - 1)
+    const volume = this.layers.volume
+    const columns: number[][] = []
+    let levels = 1
+    for (let lj = 0; lj < CHUNK_VERTS; lj++)
+      for (let li = 0; li < CHUNK_VERTS; li++) {
+        const i = ci + li
+        const j = cj + lj
+        const found: number[] = []
+        columns.push(found)
+        if (i >= res || j >= res) continue
+        const ground = h[j * res + i]
+        const range = volume.columnRange(i, j)
+        let top = range ? Math.max(ground, range[1] + 2) : ground
+        if (this.surface.kind[j * res + i] !== SURFACE.none) top = Math.max(top, ground + PATH_CLEARANCE)
+        const bottom = range ? Math.min(ground - 1, range[0] - 2) : ground - 1
+        let prev = -1 // density above the first sample: air
+        let airFrom = Infinity
+        for (let y = Math.ceil(top / HEIGHT_SPACING) * HEIGHT_SPACING + HEIGHT_SPACING; y >= Math.floor(bottom / HEIGHT_SPACING) * HEIGHT_SPACING; y -= HEIGHT_SPACING) {
+          const d = this.latticeDensity(i, j, y)
+          if (prev <= 0 && d > 0) {
+            const at = y + HEIGHT_SPACING * (d / (d - prev))
+            if (airFrom - at >= SCATTER_HEADROOM && found.length < MAX_LEVELS) found.push(at)
+          } else if (prev > 0 && d <= 0) airFrom = y + HEIGHT_SPACING * (-d / (prev - d))
+          prev = d
+        }
+        levels = Math.max(levels, found.length)
+      }
+    const y = new Float32Array(CHUNK_VERTS * CHUNK_VERTS * levels).fill(NaN)
+    columns.forEach((found, at) => found.forEach((v, l) => (y[l * CHUNK_VERTS * CHUNK_VERTS + at] = v)))
+    return { ci, cj, levels, y }
+  }
+
+  /** `surfaceLevels` of these chunks and their neighbours, for those that have any. */
+  levelsAround(chunks: number[]): Map<number, SurfaceLevels> {
+    const n = chunkCount(this.layers.heights.size)
+    const out = new Map<number, SurfaceLevels>()
+    if (this.layers.volume.count === 0) return out
+    for (const c of chunks)
+      for (let dz = -1; dz <= 1; dz++)
+        for (let dx = -1; dx <= 1; dx++) {
+          const x = (c % n) + dx
+          const z = Math.floor(c / n) + dz
+          if (x < 0 || z < 0 || x >= n || z >= n || out.has(z * n + x)) continue
+          const lv = this.surfaceLevels(z * n + x)
+          if (lv) out.set(z * n + x, lv)
+        }
+    return out
   }
 
   /** Where a ray first meets the ground as shown, caves included unless `ignoreCaves`, or null. */

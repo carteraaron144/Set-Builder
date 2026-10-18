@@ -245,6 +245,8 @@ export class TerrainEditor {
     this.ground.refreshVolume()
     const size = this.layers.heights.size
     for (const key of keys) this.markChunks(chunksForHeightRect(brickFootprint(key), size))
+    // Sculpted rock can wall water in or out.
+    if (this.current.ponds.length > 0) for (const r of this.ground.rebuild(this.current, null)) this.markChunks(chunksForHeightRect(r, size))
   }
 
   private setFeatures(next: Features): void {

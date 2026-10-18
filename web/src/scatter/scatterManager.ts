@@ -2,7 +2,7 @@ import type { Scene, SceneSize } from '../scene/scene'
 import { chunkCount } from '../terrain/chunks'
 import type { TerrainEditor } from '../terrain/terrainEditor'
 import { rulesFor, type ScatterRules } from './rules'
-import type { AssetInfo, ChunkScatter, Instance } from './scatter'
+import type { AssetInfo, ChunkScatter, Instance, SurfaceLevels } from './scatter'
 
 export interface ScatterRequest {
   id: number
@@ -13,6 +13,8 @@ export interface ScatterRequest {
   heights: Float32Array
   biomes: Uint8Array
   exclusion: Uint8Array | null
+  /** Surfaces of chunks (and their neighbours) that sculpted bricks reach, as chunk / levels pairs. */
+  levels?: [number, SurfaceLevels][]
   assets: Record<string, AssetInfo>
 }
 
@@ -111,6 +113,7 @@ export class ScatterManager {
       heights: heights.data.slice(),
       biomes: biomes.data.slice(),
       exclusion: ground.exclusion?.slice() ?? null,
+      levels: [...ground.levelsAround(chunks)],
       assets: this.assets,
     }
     const flight = { id: req.id, chunks: new Set(chunks), dirtied: new Set<number>() }

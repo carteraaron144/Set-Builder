@@ -7,7 +7,7 @@ import { paint } from '../terrain/brush'
 import { CHUNK_SIZE, chunkCount } from '../terrain/chunks'
 import { createFlatLayers, heightAt, type TerrainLayers } from '../terrain/layers'
 import { parseRules, rulesFor, type ScatterRules } from './rules'
-import { assetInfoFrom, chunkCap, measureWall, scatterChunk, scatterMargin, scatterRect, type Instance, type ScatterInputs } from './scatter'
+import { assetInfoFrom, chunkCap, measureWall, scatterChunk, scatterMargin, scatterRect, type Instance, type ScatterInputs, type SurfaceLevels } from './scatter'
 
 const manifest = parsePackManifest(JSON.parse(readFileSync(resolve(__dirname, '../../../packs/setbuilder-basics/pack.json'), 'utf8')))
 const assets = assetInfoFrom([{ packId: 'setbuilder-basics', manifest }])
@@ -273,6 +273,47 @@ describe('face placement', () => {
     expect(w.height).toBeLessThan(10.5)
     expect(deg(Math.acos(w.up.y))).toBeLessThan(5)
     expect(measureWall(l.heights, -10, 3, 60)).toBeNull()
+  })
+})
+
+describe('scatter on sculpted levels', () => {
+  const levelsFor = (ys: number[]): SurfaceLevels => {
+    const y = new Float32Array(65 * 65 * ys.length)
+    ys.forEach((v, l) => y.fill(v, l * 65 * 65, (l + 1) * 65 * 65))
+    return { ci: 0, cj: 0, levels: ys.length, y }
+  }
+  const rules = groundOnly()
+
+  it('is unchanged by an empty levels map, and by one level that follows the heightmap', () => {
+    const l = layers(64, 1)
+    const base = scatterChunk(inputs(l, rules), 0, assets)
+    expect(scatterChunk({ ...inputs(l, rules), levels: new Map() }, 0, assets)).toEqual(base)
+    expect(scatterChunk({ ...inputs(l, rules), levels: new Map([[0, levelsFor([0])]]) }, 0, assets)).toEqual(base)
+  })
+
+  it('places ground rules on every level, each level keeping its spacing', () => {
+    const l = layers(64, 1)
+    const res = scatterChunk({ ...inputs(l, rules), levels: new Map([[0, levelsFor([10, 0])]]) }, 0, assets)
+    const high = res.instances.filter((i) => i.y === 10)
+    const low = res.instances.filter((i) => i.y === 0)
+    expect(high.length).toBeGreaterThan(5)
+    expect(low.length).toBeGreaterThan(5)
+    expect(res.instances.length).toBe(high.length + low.length)
+    for (const set of [high, low])
+      for (let a = 0; a < set.length; a++)
+        for (let b = a + 1; b < set.length; b++)
+          if (set[a].rule === set[b].rule) expect(Math.hypot(set[a].x - set[b].x, set[a].z - set[b].z)).toBeGreaterThanOrEqual(rules.rules[set[a].rule].minSpacing - 1e-9)
+  })
+
+  it('skips a level whose corners are missing or differ by more than a metre', () => {
+    const l = layers(64, 1)
+    const lv = levelsFor([10, 0])
+    lv.y.fill(NaN, 65 * 65) // no lower level anywhere
+    const none = scatterChunk({ ...inputs(l, rules), levels: new Map([[0, lv]]) }, 0, assets)
+    expect(none.instances.every((i) => i.y === 10)).toBe(true)
+    const steep = levelsFor([0])
+    for (let k = 0; k < steep.y.length; k++) steep.y[k] = (k % 2) * 2
+    expect(scatterChunk({ ...inputs(l, rules), levels: new Map([[0, steep]]) }, 0, assets).instances).toEqual([])
   })
 })
 

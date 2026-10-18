@@ -208,6 +208,66 @@ describe('Ground volume density', () => {
   })
 })
 
+describe('Ground ponds with sculpted rock', () => {
+  it('leaves samples out of the pond where added rock reaches the water level', () => {
+    const plain = new Ground(bowl(), with_([], [pond()]))
+    const base = bowl()
+    const b = filledBrick('a', -64)
+    for (let n = 0; n < 64; n++) b.a[3 * 64 + n] = 32 // the y = 1.5 layer, which is the water level
+    base.volume.put(brickKey(4, 0, 4), b)
+    const g = new Ground(base, with_([], [pond()]))
+    // Samples 32..39 in x and z (voxel x = -16 .. -12.5) hold rock at the water level.
+    const idx = (i: number, j: number) => j * RES + i
+    expect(plain.ponds[0].mask[idx(33, 33)]).toBe(1)
+    expect(g.ponds[0].mask[idx(33, 33)]).toBe(0)
+  })
+})
+
+describe('Ground.surfaceLevels', () => {
+  /** Bricks for a slab whose voxel layers `layers` (0..7 of brick row `by`) are Add 1 m, over 3x3 bricks around (8, 8). */
+  function slab(base: TerrainLayers, by: number, layers: number[]) {
+    for (let dx = -1; dx <= 1; dx++)
+      for (let dz = -1; dz <= 1; dz++) {
+        const b = filledBrick('a', -64)
+        for (const ly of layers) for (let n = 0; n < 64; n++) b.a[ly * 64 + n] = 32
+        base.volume.put(brickKey(8 + dx, by, 8 + dz), b)
+      }
+  }
+  const at = (lv: { y: Float32Array }, level: number, li: number, lj: number) => lv.y[(level * 65 + lj) * 65 + li]
+
+  it('finds a ledge top and the ground under a thick ledge 10 m up', () => {
+    const base = createFlatLayers(SIZE)
+    slab(base, 3, [0, 1, 2, 3, 4, 5, 6, 7]) // y 12 .. 15.5
+    const g = new Ground(base, emptyFeatures())
+    const lv = g.surfaceLevels(3)!
+    expect(lv.levels).toBe(2)
+    expect(at(lv, 0, 4, 4)).toBeGreaterThan(15.4)
+    expect(at(lv, 0, 4, 4)).toBeLessThan(15.9)
+    expect(Math.abs(at(lv, 1, 4, 4))).toBeLessThan(0.05)
+    // Away from the ledge there is only the ground.
+    expect(at(lv, 0, 40, 40)).toBeCloseTo(0, 1)
+    expect(at(lv, 1, 40, 40)).toBeNaN()
+  })
+
+  it('drops the ground under a ledge that leaves it under 3 m of air', () => {
+    const base = createFlatLayers(SIZE)
+    slab(base, 0, [4, 5, 6, 7]) // y 2 .. 3.5
+    const g = new Ground(base, emptyFeatures())
+    const lv = g.surfaceLevels(3)!
+    expect(lv.levels).toBe(1)
+    expect(at(lv, 0, 4, 4)).toBeGreaterThan(3.4)
+  })
+
+  it('is null for heightmap chunks, and for chunks only caves reach', () => {
+    const base = createFlatLayers(SIZE)
+    base.volume.put(brickKey(13, 3, 13), filledBrick('a', 32))
+    const g = new Ground(base, emptyFeatures())
+    expect(g.surfaceLevels(0)).toBeNull()
+    expect(g.surfaceLevels(3)).not.toBeNull()
+    expect(new Ground(createFlatLayers(SIZE), emptyFeatures()).surfaceLevels(3)).toBeNull()
+  })
+})
+
 function heightAtRef(g: Ground, x: number, z: number): number {
   return heightAt(g.layers.heights, x, z)
 }

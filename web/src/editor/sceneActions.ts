@@ -136,9 +136,10 @@ export async function exportCurrent(deps: ExportDeps, o: ExportOptions): Promise
     const instancesByRule: Instance[][] = rules.rules.map(() => [])
     if (deps.library) {
       // Scatter stands on the carved ground and keeps out of the paths, rivers and ponds.
-      const inputs = { layers: terrain.ground.layers, seed: scene.seed, rules, exclusion: terrain.ground.exclusion }
-      const assets = assetInfoOf(library)
       const n = chunkCount(scene.size)
+      const levels = terrain.ground.levelsAround(Array.from({ length: n * n }, (_, c) => c))
+      const inputs = { layers: terrain.ground.layers, seed: scene.seed, rules, exclusion: terrain.ground.exclusion, levels }
+      const assets = assetInfoOf(library)
       for (let c = 0; c < n * n; c++) for (const i of scatterChunk(inputs, c, assets).instances) instancesByRule[i.rule].push(i)
     }
     const root = buildExportScene({ scene, layers: terrain.layers, ground: terrain.ground, instancesByRule, rules, library, overhangs: grassOverhangs }, o)

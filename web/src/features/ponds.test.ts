@@ -108,4 +108,30 @@ describe('floodPond', () => {
     expect(fill.capped).toBe(true)
     expect(fill.bounds).toBeNull()
   })
+
+  it('treats solid samples at the water level as walls, so a ring holds water in', () => {
+    const h = terrain(bowlHeight)
+    const ring = (i: number, j: number) => {
+      const r = Math.hypot(-SIZE / 2 + i * 0.5, -SIZE / 2 + j * 0.5)
+      return r >= 8 && r <= 9.5
+    }
+    const open_ = floodPond(h, pond(2))
+    const held = floodPond(h, pond(2), (i, j) => ring(i, j))
+    let outside = 0
+    let wall = 0
+    eachSample(held, (x, z, flooded, idx) => {
+      const r = Math.hypot(x, z)
+      if (flooded && r > 9.5) outside++
+      if (flooded && ring(idx % RES, Math.floor(idx / RES))) wall++
+    })
+    expect(outside).toBe(0)
+    expect(wall).toBe(0)
+    expect(held.mask.reduce((a, b) => a + b, 0)).toBeGreaterThan(100)
+    expect(open_.mask.reduce((a, b) => a + b, 0)).toBeGreaterThan(held.mask.reduce((a, b) => a + b, 0) * 2)
+  })
+
+  it('floods like before when nothing is solid', () => {
+    const h = terrain(bowlHeight)
+    expect(floodPond(h, pond(2), () => false)).toEqual(floodPond(h, pond(2)))
+  })
 })
