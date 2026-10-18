@@ -23,15 +23,17 @@ interface Change {
   index: number
   channel: 'a' | 'k'
   value: number
+  /** Lowers the stored value (Add clearing carved K) instead of raising it. */
+  lower: boolean
 }
 
 /**
  * Applies one 3D dab and returns the keys of the bricks it changed, or 'limit' (changing nothing) when it would
  * need more bricks than a scene may hold.
  *
- * Add raises A and Carve raises K so the combined density there moves by at most the raise rate·strength·dt
- * per dab: up for Add (capped at a sphere's signed distance, radius·falloff weight − distance), down for Carve
- * (only in solid, floored at the negated sphere). Smooth 3D moves the combined density by at most the same
+ * Add raises A and Carve raises K so the combined density near the surface moves by at most the raise rate·strength·dt
+ * per dab: up for Add (which also lowers K where it capped the density, refilling carved space), down for Carve (only in
+ * solid). Smooth 3D moves the combined density by at most the same
  * amount toward its 3×3×3 box blur, raising A where the blur is higher and K where it is lower.
  */
 export function sculpt3d(
@@ -60,9 +62,10 @@ export function sculpt3d(
     const brick = v.get(brickKey(vi >> 3, vk >> 3, vj >> 3))
     return brick ? brick[channel][((vk & 7) * BRICK + (vj & 7)) * BRICK + (vi & 7)] : DEFAULT_UNITS
   }
-  const propose = (vi: number, vk: number, vj: number, channel: 'a' | 'k', value: number) => {
-    if (value <= read(vi, vk, vj, channel)) return
-    changes.push({ key: brickKey(vi >> 3, vk >> 3, vj >> 3), index: ((vk & 7) * BRICK + (vj & 7)) * BRICK + (vi & 7), channel, value })
+  const propose = (vi: number, vk: number, vj: number, channel: 'a' | 'k', value: number, lower = false) => {
+    const now = read(vi, vk, vj, channel)
+    if (lower ? value >= now : value <= now) return
+    changes.push({ key: brickKey(vi >> 3, vk >> 3, vj >> 3), index: ((vk & 7) * BRICK + (vj & 7)) * BRICK + (vi & 7), channel, value, lower })
   }
 
   for (let vk = k0; vk <= k1; vk++)
@@ -76,16 +79,22 @@ export function sculpt3d(
         if (w === 0) continue
         const step = RAISE_RATE * b.strength * w * dab.dt
         if (target) {
-          // Move the combined density by one step instead of jumping to the sphere, so the surface bubbles out gradually.
-          const t = Math.min(VALUE_LIMIT, radius * w - d)
-          const s0 = density(x, y, z)
+          // Move the combined density by one step instead of jumping to the sphere, so the surface bubbles out gradually
+          // and keeps building as the brush follows it. Only voxels within the value limit of the surface matter.
+          let s0 = density(x, y, z)
           if (target === 'a') {
-            const next = Math.min(t, s0 + step)
-            if (next > s0) propose(vi, vk, vj, 'a', units(next))
-          } else if (s0 > 0) {
+            // A voxel reading the clamp value could be any distance from the surface; the brush sits on the surface, so
+            // its distance to the brush centre bounds it, and growth starts from that rather than from the clamp.
+            if (s0 <= -VALUE_LIMIT) s0 = -d
+            if (s0 > -VALUE_LIMIT && s0 < VALUE_LIMIT) {
+              const next = s0 + step
+              propose(vi, vk, vj, 'a', units(next))
+              // Carved space refills: a positive K caps the density, so pull it back out of the way.
+              propose(vi, vk, vj, 'k', units(-next), true)
+            }
+          } else if (s0 > 0 && s0 < VALUE_LIMIT) {
             // Air needs no carving, and a positive K there would block later Add.
-            const next = Math.max(s0 - step, -t)
-            if (next < s0) propose(vi, vk, vj, 'k', units(-next))
+            propose(vi, vk, vj, 'k', units(-(s0 - step)))
           }
         } else {
           let blur = 0
@@ -118,7 +127,7 @@ export function sculpt3d(
       brick = v.get(c.key) ?? { a: new Int8Array(BRICK ** 3).fill(DEFAULT_UNITS), k: new Int8Array(BRICK ** 3).fill(DEFAULT_UNITS) }
       planned.set(c.key, brick)
     }
-    brick[c.channel][c.index] = Math.max(brick[c.channel][c.index], c.value)
+    brick[c.channel][c.index] = (c.lower ? Math.min : Math.max)(brick[c.channel][c.index], c.value)
   }
   for (const [key, brick] of planned) v.put(key, brick)
   return touched

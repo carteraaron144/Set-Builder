@@ -26,10 +26,10 @@ describe('sculpt3d', () => {
 
   it('a first Add dab only nudges the surface; it takes a few to make a blob', () => {
     const v = new VolumeLayer(SIZE)
-    run(v, 'add', brush(2), dab(0, 5, 0))
+    run(v, 'add', brush(2), { ...dab(0, 0, 0), dt: 1 / 60 })
     const o = { a: 0, k: 0 }
-    v.sample(0, 5, 0, o)
-    expect(o.a).toBeLessThan(0)
+    v.sample(0, 0, 0, o)
+    expect(o.a).toBeLessThan(0.2)
   })
 
   it('Add grows the surface from the ground by about the raise rate, not a radius at once', () => {
@@ -44,9 +44,9 @@ describe('sculpt3d', () => {
 
   it('Add makes the centre solid after repeated dabs and leaves distant bricks absent', () => {
     const v = new VolumeLayer(SIZE)
-    for (let n = 0; n < 5; n++) expect(run(v, 'add', brush(2), dab(0, 5, 0))).not.toBe('limit')
+    for (let n = 0; n < 5; n++) expect(run(v, 'add', brush(2), dab(0, 0, 0))).not.toBe('limit')
     const o = { a: 0, k: 0 }
-    v.sample(0, 5, 0, o)
+    v.sample(0, 0, 0, o)
     expect(o.a).toBeGreaterThan(0)
     expect(o.k).toBe(-2)
     for (const key of v.keys()) {
@@ -54,7 +54,7 @@ describe('sculpt3d', () => {
       // Nearest point of the 4 m brick to the dab (voxel 0 of x is at -32).
       const near = (lo: number, c: number) => Math.max(lo, Math.min(lo + 3.5, c)) - c
       const dx = near(-32 + bx * 4, 0)
-      const dy = near(by * 4, 5)
+      const dy = near(by * 4, 0)
       const dz = near(-32 + bz * 4, 0)
       expect(Math.hypot(dx, dy, dz)).toBeLessThanOrEqual(2 + 1)
     }
@@ -85,21 +85,50 @@ describe('sculpt3d', () => {
 
   it('saturates repeated Add at the value limit', () => {
     const v = new VolumeLayer(SIZE)
-    for (let n = 0; n < 40; n++) run(v, 'add', brush(2), dab(0, 5, 0))
+    for (let n = 0; n < 40; n++) run(v, 'add', brush(2), dab(0, 0, 0))
     const o = { a: 0, k: 0 }
-    v.sampleLattice(64, 64, 5, o)
+    v.sampleLattice(64, 64, 0, o)
     expect(o.a).toBe(VALUE_LIMIT)
   })
 
   it.each([0.1, 1 / 60])('moves the surface by at most the raise rate × dt per dab once there is one (dt %f)', (dt) => {
     const v = new VolumeLayer(SIZE)
-    run(v, 'add', brush(4), dab(0, 5, 0))
+    run(v, 'add', brush(4), dab(0, 0, 0))
     const before = new Map([...v.keys()].map((k) => [k, v.get(k)!.a.slice()]))
-    run(v, 'add', brush(4), { ...dab(0, 5, 0), dt })
+    run(v, 'add', brush(4), { ...dab(0, 0, 0), dt })
     let biggest = 0
     for (const k of v.keys()) for (let i = 0; i < 512; i++) biggest = Math.max(biggest, (v.get(k)!.a[i] - (before.get(k)?.[i] ?? -64)) / 32)
     expect(biggest).toBeLessThanOrEqual(RAISE_RATE * dt + 1 / 32)
     expect(biggest).toBeGreaterThan(0)
+  })
+
+  it('Add refills space that Carve removed', () => {
+    const v = new VolumeLayer(SIZE)
+    // Solid ground to y = 1; carve a hole, then add it back.
+    const dens = (x: number, y: number, z: number) => {
+      const o = { a: 0, k: 0 }
+      v.sample(x, y, z, o)
+      return Math.min(Math.max(1 - y, o.a), -o.k)
+    }
+    for (let n = 0; n < 30; n++) sculpt3d(v, 'carve', brush(3, 1), { ...dab(0, 1, 0), dt: 1 / 60 }, dens, () => {})
+    expect(dens(0, 0.5, 0)).toBeLessThanOrEqual(0)
+    for (let n = 0; n < 120; n++) sculpt3d(v, 'add', brush(3, 1), { ...dab(0, 1, 0), dt: 1 / 60 }, dens, () => {})
+    expect(dens(0, 0.5, 0)).toBeGreaterThan(0)
+  })
+
+  it('keeps building as the brush follows the surface up', () => {
+    const v = new VolumeLayer(SIZE)
+    const dens = (x: number, y: number, z: number) => {
+      const o = { a: 0, k: 0 }
+      v.sample(x, y, z, o)
+      return Math.min(Math.max(-y, o.a), -o.k)
+    }
+    let top = 0
+    for (let n = 0; n < 240; n++) {
+      sculpt3d(v, 'add', brush(3, 1), { ...dab(0, top, 0), dt: 1 / 60 }, dens, () => {})
+      while (dens(0, top + 0.5, 0) > 0) top += 0.5
+    }
+    expect(top).toBeGreaterThan(4)
   })
 
   it('Carve gradually lowers solid ground and leaves air alone', () => {
