@@ -120,6 +120,32 @@ describe('sculpt3d', () => {
     expect(densityOf(v)(0, 0, 0)).toBeLessThan(1.2)
   })
 
+  it('Carve dissolves flat ground into a smooth dish, not a staircase', () => {
+    seeded()
+    const v = new VolumeLayer(SIZE)
+    const dens = densityOf(v)
+    // Surface height above x: the highest y still solid, found by bisection on the interpolated density.
+    const surface = (x: number) => {
+      let lo = -8
+      let hi = 1
+      for (let i = 0; i < 30; i++) {
+        const mid = (lo + hi) / 2
+        if (dens(x, mid, 0) > 0) lo = mid
+        else hi = mid
+      }
+      return lo
+    }
+    // Strength 0.5 for 0.4 s with the brush following the surface down, as a held brush does.
+    for (let n = 0; n < 24; n++) sculpt3d(v, 'carve', brush(4, 0.5), { ...dab(0, surface(0), 0), dt: 1 / 60 }, dens, () => {})
+    const xs = Array.from({ length: 91 }, (_, i) => -4.5 + i * 0.1)
+    const h = xs.map(surface)
+    expect(h[45]).toBeLessThan(-1.2)
+    expect(h[0]).toBeGreaterThan(h[45] + 0.3)
+    let worst = 0
+    for (let i = 1; i < h.length - 1; i++) worst = Math.max(worst, Math.abs(h[i - 1] - 2 * h[i] + h[i + 1]))
+    expect(worst).toBeLessThan(0.3)
+  })
+
   it('Add refills space that Carve removed', () => {
     const v = new VolumeLayer(SIZE)
     // Solid ground to y = 1; carve a hole, then add it back.

@@ -102,9 +102,12 @@ export function sculpt3d(
               // Carved space refills: a positive K caps the density, so pull it back out of the way.
               propose(vi, vk, vj, 'k', units(-next), true)
             }
-          } else if (s0 > 0 && s0 < VALUE_LIMIT) {
-            // Air needs no carving, and a positive K there would block later Add.
-            propose(vi, vk, vj, 'k', units(-(s0 - step)))
+          } else {
+            // Mirror of Add: a voxel at the clamp (or beyond) is at least that deep, and the brush sits on the surface, so its
+            // distance to the brush centre bounds it. Voxels on both sides of the surface move, so the field keeps its slope
+            // and the surface slides smoothly instead of stalling at the voxel lattice.
+            if (s0 >= VALUE_LIMIT) s0 = d
+            if (s0 > -VALUE_LIMIT && s0 < VALUE_LIMIT) propose(vi, vk, vj, 'k', units(-(s0 - step)))
           }
         } else {
           let blur = 0
