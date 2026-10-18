@@ -2,7 +2,7 @@ import { Mesh, type BufferGeometry, type Material, type Object3D } from 'three'
 import { beforeAll, describe, expect, it } from 'vitest'
 import type { AssetLibrary } from '../assets/assetLibrary'
 import { assetInfoOf } from '../assets/assetLibrary'
-import type { Features } from '../features/features'
+import { emptyFeatures, type Features } from '../features/features'
 import { Ground } from '../features/ground'
 import { createScene } from '../scene/scene'
 import { rulesFor } from '../scatter/rules'
@@ -13,6 +13,7 @@ import { cloneLayers, createFlatLayers } from '../terrain/layers'
 import { buildOverhangGeometry } from '../terrain/overhang'
 import { DEFAULT_PALETTE } from '../terrain/palette'
 import { loadBasicsLibrary } from '../test/basicsLibrary'
+import { brickKey } from '../terrain/volume'
 import { buildExportScene, EXPORT_DEFAULTS, type ExportOptions } from './exportScene'
 
 let library: AssetLibrary
@@ -218,5 +219,19 @@ describe('buildExportScene with caves', () => {
     }
     expect(vertsOf()).toBe(65 * 65)
     expect(vertsOf(true)).toBe(65 * 65 + lip.positions.length / 3)
+  })
+
+  it('exports sculpted shapes: more terrain triangles and a vertex above the heightmap', () => {
+    const flat = createFlatLayers(64)
+    const withLedge = createFlatLayers(64)
+    for (let dx = -1; dx <= 1; dx++) for (let dz = -1; dz <= 1; dz++) withLedge.volume.put(brickKey(8 + dx, 2, 8 + dz), { a: new Int8Array(512).fill(32), k: new Int8Array(512).fill(-64) })
+    const exportOf = (l: typeof flat) => buildExportScene({ scene, layers: l, ground: new Ground(l, emptyFeatures()), instancesByRule: rules.rules.map(() => []), rules, library }, { ...EXPORT_DEFAULTS, collision: false })
+    const count = (l: typeof flat) =>
+      meshes(exportOf(l).getObjectByName('terrain')!)
+        .filter((m) => !m.name.endsWith('-col'))
+        .reduce((n, m) => n + tris(m.geometry), 0)
+    expect(count(withLedge)).toBeGreaterThan(count(flat))
+    const top = meshes(exportOf(withLedge).getObjectByName('terrain')!).reduce((y, m) => Math.max(y, ...Array.from(m.geometry.getAttribute('position').array).filter((_, i) => i % 3 === 1)), -Infinity)
+    expect(top).toBeGreaterThan(8)
   })
 })
