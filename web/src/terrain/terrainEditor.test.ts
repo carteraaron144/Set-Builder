@@ -3,6 +3,7 @@ import { emptyFeatures, type Features, type Spline } from '../features/features'
 import { chunksForHeightRect } from './chunks'
 import { createFlatLayers, type TerrainLayers } from './layers'
 import { TerrainEditor, type StrokeTool } from './terrainEditor'
+import { brickKey } from './volume'
 
 const raise: StrokeTool = { tool: 'terrain', mode: 'raise' }
 const brush = { radius: 4, strength: 1, falloff: 0 }
@@ -315,5 +316,99 @@ describe('TerrainEditor features', () => {
     while (ed.undo()) undone++
     expect(undone).toBe(100)
     expect(ed.features).toEqual(one(path(0, 'p0')))
+  })
+})
+
+describe('TerrainEditor 3D strokes', () => {
+  const add: StrokeTool = { tool: 'terrain', mode: 'add' }
+  const b3 = { radius: 3, strength: 1, falloff: 0.5 }
+
+  function stroke3(ed: TerrainEditor, y = 5, x = 0, z = 0, tool: StrokeTool = add) {
+    ed.beginStroke(tool, b3, { x, z })
+    const r = ed.dab3({ x, y, z }, 0.1, false)
+    ed.endStroke()
+    return r
+  }
+
+  const snapshot = (ed: TerrainEditor) => [...ed.layers.volume.keys()].sort().map((k) => [k, ed.layers.volume.get(k)!.a.slice(), ed.layers.volume.get(k)!.k.slice()] as const)
+
+  it('undoes an Add stroke to an empty volume and dirties the same chunks', () => {
+    const { ed, onChange } = editor(64)
+    stroke3(ed)
+    expect(ed.layers.volume.count).toBeGreaterThan(0)
+    expect(onChange).toHaveBeenCalledWith('stroke')
+    const dirtyAfter = ed.takeDirtyChunks()
+    expect(dirtyAfter.length).toBeGreaterThan(0)
+    expect(ed.ground.hasVolume(dirtyAfter[0])).toBe(true)
+    expect(ed.undo()).toBe(true)
+    expect(ed.layers.volume.count).toBe(0)
+    expect(ed.takeDirtyChunks()).toEqual(dirtyAfter)
+    expect(ed.ground.isSdfChunk(dirtyAfter[0])).toBe(false)
+  })
+
+  it('redoes to identical bricks', () => {
+    const { ed } = editor(64)
+    stroke3(ed)
+    const first = snapshot(ed)
+    ed.undo()
+    ed.redo()
+    expect(snapshot(ed)).toEqual(first)
+  })
+
+  it('keeps history independent of later strokes that edit the same bricks', () => {
+    const { ed } = editor(64)
+    stroke3(ed)
+    const first = snapshot(ed)
+    stroke3(ed)
+    expect(snapshot(ed)).not.toEqual(first)
+    ed.undo()
+    expect(snapshot(ed)).toEqual(first)
+  })
+
+  it('ends the stroke on undo mid-drag and ignores later dabs', () => {
+    const { ed } = editor(64)
+    stroke3(ed)
+    const first = snapshot(ed)
+    ed.beginStroke(add, b3, { x: 8, z: 8 })
+    expect(ed.dab3({ x: 8, y: 5, z: 8 }, 0.1, false)).toBe('ok')
+    ed.undo()
+    expect(ed.dab3({ x: 12, y: 5, z: 12 }, 0.1, false)).toBe('ok')
+    ed.endStroke()
+    expect(snapshot(ed)).toEqual(first)
+    expect(ed.canUndo).toBe(true)
+  })
+
+  it('leaves bricks byte-identical across a 2D Raise under a ledge and its undo', () => {
+    const { ed } = editor(64)
+    stroke3(ed, 8)
+    const bricks = snapshot(ed)
+    stroke(ed, raise, 0, 0)
+    expect(snapshot(ed)).toEqual(bricks)
+    ed.undo()
+    expect(snapshot(ed)).toEqual(bricks)
+  })
+
+  it('records no entry for a stroke whose first dab hits the brick limit, and one for a partial stroke', () => {
+    const { ed } = editor(64)
+    const filler = { a: new Int8Array(512).fill(-64), k: new Int8Array(512).fill(-64) }
+    filler.a[0] = 0
+    for (let n = 0; n < 7999; n++) ed.layers.volume.put(brickKey(-2000 + (n % 100), -100 + Math.floor(n / 100), -2000), { a: filler.a.slice(), k: filler.k.slice() })
+    ed.beginStroke(add, b3, { x: 0, z: 0 })
+    expect(ed.dab3({ x: 0, y: 5, z: 0 }, 0.1, false)).toBe('limit')
+    ed.endStroke()
+    expect(ed.canUndo).toBe(false)
+    expect(ed.layers.volume.count).toBe(7999)
+
+    // A carve in the filler bricks' own voxels needs no new bricks; then an Add limit mid-stroke keeps the earlier change.
+    const { ed: ed2 } = editor(64)
+    ed2.beginStroke(add, { ...b3, radius: 1 }, { x: 0, z: 0 })
+    expect(ed2.dab3({ x: 0, y: 5, z: 0 }, 0.1, false)).toBe('ok')
+    const n = ed2.layers.volume.count
+    for (let i = 0; i < 8000 - n - 1; i++) ed2.layers.volume.put(brickKey(-2000 + (i % 100), -100 + Math.floor(i / 100), -2000), { a: filler.a.slice(), k: filler.k.slice() })
+    expect(ed2.dab3({ x: 20, y: 5, z: 20 }, 0.1, false)).toBe('limit')
+    ed2.endStroke()
+    expect(ed2.canUndo).toBe(true)
+    ed2.undo()
+    expect(ed2.layers.volume.count).toBe(8000 - n - 1)
   })
 })

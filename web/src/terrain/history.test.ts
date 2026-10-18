@@ -66,4 +66,11 @@ describe('StrokeHistory', () => {
     capped.push(features)
     expect(capped.bytes).toBe(bytes)
   })
+
+  it('counts 1,024 bytes per stored brick in a volume patch', () => {
+    const brick = () => ({ a: new Int8Array(512), k: new Int8Array(512) })
+    const h = new StrokeHistory()
+    h.push({ kind: 'volume', before: new Map([[1, null]]), after: new Map([[1, brick()], [2, brick()]]) })
+    expect(h.bytes).toBe(2048)
+  })
 })

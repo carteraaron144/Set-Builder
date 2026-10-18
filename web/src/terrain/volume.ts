@@ -37,6 +37,17 @@ function isDefault(b: Brick): boolean {
   return true
 }
 
+/** The height-sample footprint of one brick: its xz extent plus 4 samples each way. */
+export function brickFootprint(key: number): Rect {
+  const [bx, , bz] = unpackKey(key)
+  return {
+    x0: bx * BRICK - FOOTPRINT_MARGIN,
+    z0: bz * BRICK - FOOTPRINT_MARGIN,
+    x1: bx * BRICK + BRICK - 1 + FOOTPRINT_MARGIN,
+    z1: bz * BRICK + BRICK - 1 + FOOTPRINT_MARGIN,
+  }
+}
+
 export class VolumeLayer {
   private bricks = new Map<number, Brick>()
   /** Brick y-levels present per (bx, bz) column. */
@@ -118,17 +129,7 @@ export class VolumeLayer {
   }
 
   footprints(): Rect[] {
-    const out: Rect[] = []
-    for (const key of this.bricks.keys()) {
-      const [bx, , bz] = unpackKey(key)
-      out.push({
-        x0: bx * BRICK - FOOTPRINT_MARGIN,
-        z0: bz * BRICK - FOOTPRINT_MARGIN,
-        x1: bx * BRICK + BRICK - 1 + FOOTPRINT_MARGIN,
-        z1: bz * BRICK + BRICK - 1 + FOOTPRINT_MARGIN,
-      })
-    }
-    return out
+    return [...this.bricks.keys()].map(brickFootprint)
   }
 
   columnRange(i: number, j: number): readonly [number, number] | null {

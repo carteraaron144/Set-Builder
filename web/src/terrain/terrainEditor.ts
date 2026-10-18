@@ -3,7 +3,10 @@ import type { Features } from '../features/features'
 import { Ground } from '../features/ground'
 import { paint, sculpt, type BrushSettings, type TerrainMode } from './brush'
 import { chunksForBiomeRect, chunksForHeightRect } from './chunks'
-import { isFeaturesPatch, StrokeHistory, type HistoryEntry } from './history'
+import { is3dMode, sculpt3d } from './brush3d'
+import { isFeaturesPatch, isVolumePatch, StrokeHistory, type HistoryEntry, type VolumePatch } from './history'
+import type { Vec3 } from './pick'
+import { brickFootprint, type Brick } from './volume'
 import { cropRect, heightAt, pasteRect, type BiomeId, type Rect, type TerrainLayers } from './layers'
 
 export type StrokeTool = { tool: 'terrain'; mode: TerrainMode; terraceStep?: number } | { tool: 'paint'; biome: BiomeId }
@@ -17,6 +20,8 @@ interface Stroke {
   rect: Rect | null
   /** Paint strokes blend in floats so slow (low-strength, high-refresh) painting still converges. */
   weights: Float32Array | null
+  /** 3D strokes: a copy of each brick as it was before the stroke first touched it (null = absent). */
+  bricksBefore: Map<number, Brick | null> | null
   /** Undo was pressed mid-drag: ignore the rest of this drag. */
   cancelled: boolean
 }
@@ -27,6 +32,11 @@ const union = (a: Rect | null, b: Rect): Rect =>
 function sameValues(a: Float32Array | Uint8Array, b: Float32Array | Uint8Array): boolean {
   for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false
   return true
+}
+
+function sameBrick(a: Brick | null, b: Brick | null): boolean {
+  if (!a || !b) return a === b
+  return sameValues(a.a, b.a) && sameValues(a.k, b.k)
 }
 
 /**
@@ -98,12 +108,14 @@ export class TerrainEditor {
 
   beginStroke(tool: StrokeTool, brush: BrushSettings, at: GroundPoint | null): void {
     if (this.stroke) this.endStroke()
+    const is3d = tool.tool === 'terrain' && is3dMode(tool.mode)
     this.stroke = {
       tool,
       brush: { ...brush },
       flattenTo: at ? heightAt(this.layers.heights, at.x, at.z) : 0,
-      snapshot: this.layerData(tool).slice(),
+      snapshot: is3d ? new Float32Array(0) : this.layerData(tool).slice(),
       rect: null,
+      bricksBefore: is3d ? new Map() : null,
       weights: tool.tool === 'paint' ? Float32Array.from(this.layers.biomes.data, (v) => v / 255) : null,
       cancelled: false,
     }
@@ -111,7 +123,7 @@ export class TerrainEditor {
 
   dab(at: GroundPoint, dt: number, invert: boolean): void {
     const s = this.stroke
-    if (!s || s.cancelled) return
+    if (!s || s.cancelled || s.bricksBefore) return
     const dab = { x: at.x, z: at.z, dt, invert }
     const rect =
       s.tool.tool === 'terrain'
@@ -126,9 +138,31 @@ export class TerrainEditor {
     this.markDirty(s.tool.tool === 'terrain' ? 'heights' : 'biomes', rect)
   }
 
+  /** One 3D dab at a world point. 'limit' means the scene is out of bricks; whatever the stroke changed so far still counts. */
+  dab3(at: Vec3, dt: number, invert: boolean): 'ok' | 'limit' {
+    const s = this.stroke
+    if (!s || s.cancelled || !s.bricksBefore || s.tool.tool !== 'terrain' || !is3dMode(s.tool.mode)) return 'ok'
+    const before = s.bricksBefore
+    const volume = this.layers.volume
+    const touched = sculpt3d(
+      volume,
+      s.tool.mode,
+      s.brush,
+      { ...at, dt, invert },
+      (x, y, z) => this.ground.density(x, y, z),
+      (key) => {
+        if (!before.has(key)) before.set(key, volume.copy(key))
+      },
+    )
+    if (touched === 'limit') return 'limit'
+    this.markVolumeDirty(touched)
+    return 'ok'
+  }
+
   endStroke(): void {
     const s = this.stroke
     this.stroke = null
+    if (s && !s.cancelled && s.bricksBefore) return this.endVolumeStroke(s.bricksBefore)
     if (!s || s.cancelled || !s.rect) return
     const layer = s.tool.tool === 'terrain' ? 'heights' : 'biomes'
     const res = this.layers[layer].resolution
@@ -140,12 +174,26 @@ export class TerrainEditor {
     this.onChange('stroke')
   }
 
+  private endVolumeStroke(before: Map<number, Brick | null>): void {
+    if (before.size === 0) return
+    const after = new Map<number, Brick | null>()
+    let changed = false
+    for (const [key, was] of before) {
+      const now = this.layers.volume.copy(key)
+      after.set(key, now)
+      if (!sameBrick(was, now)) changed = true
+    }
+    if (!changed) return
+    this.history.push({ kind: 'volume', before, after })
+    this.onChange('stroke')
+  }
+
   /** Mid-drag, ends the stroke first and ignores the rest of that drag. */
   undo(): boolean {
     if (this.stroke && !this.stroke.cancelled) {
       const tool = this.stroke.tool
       this.endStroke()
-      this.stroke = { tool, brush: { radius: 0, strength: 0, falloff: 0 }, flattenTo: 0, snapshot: new Uint8Array(0), rect: null, weights: null, cancelled: true }
+      this.stroke = { tool, brush: { radius: 0, strength: 0, falloff: 0 }, flattenTo: 0, snapshot: new Uint8Array(0), rect: null, weights: null, bricksBefore: null, cancelled: true }
     }
     const p = this.history.undo()
     if (!p) return false
@@ -181,9 +229,22 @@ export class TerrainEditor {
       this.committed = p[side]
       return
     }
+    if (isVolumePatch(p)) return this.applyVolume(p, side)
     const layer = this.layers[p.layer]
     pasteRect(layer.data, layer.resolution, p.layer === 'heights' ? 1 : 4, p.rect, p[side])
     this.markDirty(p.layer, p.rect)
+  }
+
+  private applyVolume(p: VolumePatch, side: 'before' | 'after'): void {
+    for (const [key, brick] of p[side]) this.layers.volume.put(key, brick && { a: brick.a.slice(), k: brick.k.slice() })
+    this.markVolumeDirty([...p[side].keys()])
+  }
+
+  /** Refreshes which chunks are SDF chunks and dirties every chunk the given bricks' footprints touch. */
+  private markVolumeDirty(keys: number[]): void {
+    this.ground.refreshVolume()
+    const size = this.layers.heights.size
+    for (const key of keys) this.markChunks(chunksForHeightRect(brickFootprint(key), size))
   }
 
   private setFeatures(next: Features): void {
