@@ -48,6 +48,20 @@ describe('VolumeLayer', () => {
     expect(out.a).toBeCloseTo(-0.5, 6)
   })
 
+  it('samples exactly the default away from any set voxel', () => {
+    const v = new VolumeLayer(64)
+    const b = emptyBrick()
+    b.a[0] = 0
+    v.put(brickKey(14, 0, 14), b)
+    const out = { a: 0, k: 0 }
+    let seed = 99
+    const rnd = () => ((seed = (seed * 1664525 + 1013904223) >>> 0) / 2 ** 32)
+    for (let n = 0; n < 300; n++) {
+      v.sample(-30 + rnd() * 20, (rnd() - 0.5) * 20, -30 + rnd() * 20, out)
+      expect(out).toEqual({ a: -2, k: -2 })
+    }
+  })
+
   it('drops all-default bricks', () => {
     const v = new VolumeLayer(64)
     v.put(brickKey(0, 0, 0), emptyBrick())

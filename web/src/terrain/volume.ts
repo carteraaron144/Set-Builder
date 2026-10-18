@@ -114,15 +114,20 @@ export class VolumeLayer {
     const fy = gy - k0
     for (const channel of ['a', 'k'] as const) {
       let sum = 0
+      let set = false
       for (let dk = 0; dk < 2; dk++) {
         for (let dj = 0; dj < 2; dj++) {
           for (let di = 0; di < 2; di++) {
             const w = (di ? fx : 1 - fx) * (dj ? fz : 1 - fz) * (dk ? fy : 1 - fy)
-            if (w !== 0) sum += w * this.voxel(i0 + di, k0 + dk, j0 + dj, channel)
+            if (w === 0) continue
+            const u = this.voxel(i0 + di, k0 + dk, j0 + dj, channel)
+            if (u !== DEFAULT) set = true
+            sum += w * u
           }
         }
       }
-      out[channel] = sum * VOXEL_STEP
+      // Rounding must not leak into points no voxel has set: callers treat exactly -2 as "nothing here".
+      out[channel] = set ? sum * VOXEL_STEP : -VALUE_LIMIT
     }
   }
 

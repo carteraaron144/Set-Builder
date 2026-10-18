@@ -154,4 +154,18 @@ describe('sculpt3d', () => {
     v.sample(RADIUS_3D_MAX + 2, 5, 0, o)
     expect(o.a).toBe(-2)
   })
+
+  it('Smooth 3D leaves voxels far from the surface alone, so later Add still works', () => {
+    const dome = (x: number, z: number) => 10 - 0.05 * (x * x + z * z)
+    const v = new VolumeLayer(SIZE)
+    const density = (x: number, y: number, z: number) => {
+      const o = { a: 0, k: 0 }
+      v.sample(x, y, z, o)
+      // As Ground.density: exactly h - y where no brick has set anything.
+      if (o.a === -2 && o.k === -2) return dome(x, z) - y
+      return Math.min(Math.max(dome(x, z) - y, o.a), -o.k)
+    }
+    expect(sculpt3d(v, 'smooth3d', brush(6), dab(0, 10, 0), density, () => {})).not.toBe('limit')
+    for (const key of v.keys()) for (const ch of ['a', 'k'] as const) expect(v.get(key)![ch].every((u) => u < 64)).toBe(true)
+  })
 })

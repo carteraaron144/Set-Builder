@@ -88,8 +88,14 @@ export function sculpt3d(
               for (let dx = -1; dx <= 1; dx++) blur += density(x + dx * HEIGHT_SPACING, y + dy * HEIGHT_SPACING, z + dz * HEIGHT_SPACING)
           blur /= 27
           const s0 = density(x, y, z)
-          if (blur > s0) propose(vi, vk, vj, 'a', units(Math.min(blur, s0 + step)))
-          else if (blur < s0) propose(vi, vk, vj, 'k', units(-Math.max(blur, s0 - step)))
+          // Only near the surface: A and K beyond ±2 m would be invisible now and block later edits.
+          if (blur > s0) {
+            const next = Math.min(blur, s0 + step)
+            if (Math.abs(s0) < VALUE_LIMIT && Math.abs(next) < VALUE_LIMIT) propose(vi, vk, vj, 'a', units(next))
+          } else if (blur < s0) {
+            const next = Math.max(blur, s0 - step)
+            if (Math.abs(s0) < VALUE_LIMIT && Math.abs(next) < VALUE_LIMIT) propose(vi, vk, vj, 'k', units(-next))
+          }
         }
       }
 

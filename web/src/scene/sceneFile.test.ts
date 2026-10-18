@@ -211,4 +211,21 @@ describe('scene file', () => {
     expect(reasonOf(() => readSceneFile(writeSceneFile(scene, l)))).toBe('invalid-layers')
     expect(reasonOf(() => readSceneFile(v2Zip({ 'volume.i8': new Uint8Array(7) })))).toBe('invalid-layers')
   })
+
+  it('ignores volume bricks and a volumetric mode in files older than format 5', () => {
+    const l = createFlatLayers(64)
+    l.volume.put(brickKey(1, 1, 1), { a: new Int8Array(512).fill(3), k: new Int8Array(512).fill(-64) })
+    const volume = writeSceneFile(createScene({ size: 64, mapMode: 'volumetric' }), l)
+    const bricks = new Uint8Array(4 + 1030)
+    new DataView(bricks.buffer).setUint32(0, 1, true)
+    bricks[4 + 2] = 1
+    const { mapMode: _m, ...rest } = scene
+    for (const formatVersion of [3, 4]) {
+      const json = JSON.stringify({ ...rest, mapMode: 'volumetric', formatVersion, generatorVersion: formatVersion, features: { splines: [], ponds: [], caves: [] } })
+      const read = readSceneFile(v2Zip({ 'scene.json': json, 'volume.i8': bricks }))
+      expect(read.scene.mapMode).toBe('heightmap')
+      expect(read.layers.volume.count).toBe(0)
+    }
+    expect(volume.length).toBeGreaterThan(0)
+  })
 })

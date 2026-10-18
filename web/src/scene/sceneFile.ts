@@ -100,7 +100,8 @@ export function parseScene(data: unknown): Scene {
     ...result.data,
     formatVersion: SCENE_FORMAT_VERSION,
     generatorVersion: upgraded ? GENERATOR_VERSION : result.data.generatorVersion,
-    mapMode: result.data.mapMode ?? 'heightmap',
+    // Only format 5 knows about map modes and bricks.
+    mapMode: upgraded ? 'heightmap' : (result.data.mapMode ?? 'heightmap'),
     features: features.data,
   } as Scene
 }
@@ -177,7 +178,7 @@ export function readSceneFile(bytes: Uint8Array): SceneFileContents {
   const scene = parseScene(data)
   // v1 files predate layers: flat, all meadow.
   if (formatVersionOf(data) === 1) return { scene, layers: createFlatLayers(scene.size) }
-  const layers = layersFromBuffers(scene.size, ownBuffer(files[HEIGHTMAP]), ownBuffer(files[BIOMES]), ownBuffer(files[VOLUME]))
+  const layers = layersFromBuffers(scene.size, ownBuffer(files[HEIGHTMAP]), ownBuffer(files[BIOMES]), formatVersionOf(data) === SCENE_FORMAT_VERSION ? ownBuffer(files[VOLUME]) : undefined)
   checkMapMode(scene, layers)
   return { scene, layers }
 }
