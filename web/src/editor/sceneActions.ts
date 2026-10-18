@@ -1,6 +1,6 @@
 import type { StoreApi } from 'zustand'
 import type { SceneStore } from '../persistence/sceneStore'
-import { createScene, type SceneSize } from '../scene/scene'
+import { createScene, type MapMode, type SceneSize } from '../scene/scene'
 import { readSceneFile, SCENE_FILE_EXTENSION, SceneFileError, writeSceneFile } from '../scene/sceneFile'
 import { cloneLayers } from '../terrain/layers'
 import type { Object3D } from 'three'
@@ -37,10 +37,10 @@ function canDiscard(deps: ActionDeps): boolean {
   return !deps.store.getState().dirty || deps.confirmDiscard()
 }
 
-export function newScene(deps: ActionDeps, name: string, size: SceneSize): void {
+export function newScene(deps: ActionDeps, name: string, size: SceneSize, mapMode: MapMode = 'heightmap'): void {
   if (!canDiscard(deps)) return
   const { replaceScene, setMessage } = deps.store.getState()
-  replaceScene(createScene({ name, size }))
+  replaceScene(createScene({ name, size, mapMode }))
   setMessage(null)
 }
 

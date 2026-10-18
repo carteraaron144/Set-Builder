@@ -1,16 +1,19 @@
 import type { GroundPoint } from '../camera/overheadCamera'
 
+/** A pointer hit on the ground; 3D brushes also carry the height. */
+export type BrushPoint = GroundPoint & { y?: number }
+
 export interface BrushInputOptions {
   /** The canvas. */
   element: HTMLElement
   /** A brush tool is selected. */
   active(): boolean
-  pick(clientX: number, clientY: number): GroundPoint | null
-  begin(at: GroundPoint | null): void
-  dab(at: GroundPoint, dt: number, altKey: boolean): void
+  pick(clientX: number, clientY: number): BrushPoint | null
+  begin(at: BrushPoint | null): void
+  dab(at: BrushPoint, dt: number, altKey: boolean): void
   end(): void
   /** The ground under the pointer, for the brush cursor; null when off the terrain or canvas. */
-  hover(at: GroundPoint | null): void
+  hover(at: BrushPoint | null): void
 }
 
 /** Left-drag on the canvas → begin / per-frame dab / end. Alt is tracked from pointer and key events. */

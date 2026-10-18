@@ -41,6 +41,12 @@ Terrain modes are raise, lower, smooth, flatten (to the height where the stroke 
 heights to multiples of the Step height, 0.5–5 m, for stepped earthen mounds). Paint brushes the
 meadow, forest, rocky and swamp biomes; slopes shade to earth from 30° and to rock from 60° automatically.
 
+A new scene is either a **heightmap** map (the modes above) or a **volumetric** map, chosen in the New scene dialog and
+fixed afterwards. Volumetric maps add a "3D" group: **Add** builds material in a sphere, **Carve** removes it (cutting
+ground, added material and cave walls), and **Smooth 3D** blurs the surface. Alt swaps Add and Carve. 3D brushes are
+1–12 m; the surface is picked on the full shape, and a stroke stays on a camera-facing plane through its first hit.
+A scene holds at most 8,000 bricks of 3D edits ("Volume limit reached"). The 2D modes still work and never touch them.
+
 ### Paths, rivers and ponds
 
 | Action | Path / River | Water (ponds) |

@@ -2,6 +2,7 @@ import { act, fireEvent, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { BrushPanel } from './BrushPanel'
+import { createScene } from '../scene/scene'
 import { useEditorStore } from './editorStore'
 
 beforeEach(() => {
@@ -77,5 +78,47 @@ describe('BrushPanel', () => {
     expect(screen.getByText('1.5 m')).toBeInTheDocument()
     fireEvent.change(step, { target: { value: '2.5' } })
     expect(useEditorStore.getState().terraceStep).toBe(2.5)
+  })
+
+  describe('3D modes', () => {
+    const volumetric = () => act(() => useEditorStore.getState().replaceScene(createScene({ size: 64, mapMode: 'volumetric' })))
+
+    it('offers Add, Carve and Smooth 3D in a volumetric map, and picking one sets the mode', async () => {
+      volumetric()
+      act(() => useEditorStore.getState().setTool('terrain'))
+      render(<BrushPanel />)
+      const group = screen.getByRole('radiogroup', { name: '3D' })
+      expect(within(group).getAllByRole('radio').map((r) => r.closest('label')?.textContent)).toEqual(['Add', 'Carve', 'Smooth 3D'])
+      await userEvent.click(within(group).getByRole('radio', { name: 'Add' }))
+      expect(useEditorStore.getState().terrainMode).toBe('add')
+    })
+
+    it('hides them in a heightmap map and refuses to select one', () => {
+      act(() => useEditorStore.getState().setTool('terrain'))
+      render(<BrushPanel />)
+      expect(screen.queryByRole('radiogroup', { name: '3D' })).toBeNull()
+      act(() => useEditorStore.getState().setTerrainMode('add'))
+      expect(useEditorStore.getState().terrainMode).toBe('raise')
+    })
+
+    it('limits the size slider to 12 m and clamps a larger brush on switching to a 3D mode', () => {
+      volumetric()
+      act(() => useEditorStore.getState().setTool('terrain'))
+      act(() => useEditorStore.getState().setBrush({ radius: 30 }))
+      render(<BrushPanel />)
+      expect(screen.getByRole('slider', { name: 'Size' })).toHaveAttribute('max', '50')
+      act(() => useEditorStore.getState().setTerrainMode('carve'))
+      expect(useEditorStore.getState().brush.radius).toBe(12)
+      expect(screen.getByRole('slider', { name: 'Size' })).toHaveAttribute('max', '12')
+      act(() => useEditorStore.getState().setBrush({ radius: 40 }))
+      expect(useEditorStore.getState().brush.radius).toBe(12)
+    })
+
+    it('falls back to Raise when a heightmap scene replaces a volumetric one', () => {
+      volumetric()
+      act(() => useEditorStore.getState().setTerrainMode('add'))
+      act(() => useEditorStore.getState().replaceScene(createScene({ size: 64 })))
+      expect(useEditorStore.getState().terrainMode).toBe('raise')
+    })
   })
 })

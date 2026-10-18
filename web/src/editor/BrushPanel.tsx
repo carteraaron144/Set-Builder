@@ -1,5 +1,6 @@
 import type { TerrainMode } from '../terrain/brush'
 import { BRUSH_RADIUS_MAX, BRUSH_RADIUS_MIN } from '../terrain/brush'
+import { is3dMode, RADIUS_3D_MAX } from '../terrain/brush3d'
 import { BIOME_IDS } from '../terrain/layers'
 import { BIOME_SWATCHES } from '../terrain/palette'
 import { isBrushTool, useEditorStore } from './editorStore'
@@ -13,6 +14,12 @@ const MODES: { id: TerrainMode; label: string }[] = [
   { id: 'terrace', label: 'Terrace' },
 ]
 
+const MODES_3D: { id: TerrainMode; label: string }[] = [
+  { id: 'add', label: 'Add' },
+  { id: 'carve', label: 'Carve' },
+  { id: 'smooth3d', label: 'Smooth 3D' },
+]
+
 const capitalise = (s: string) => s[0].toUpperCase() + s.slice(1)
 const percent = (v: number) => `${Math.round(v * 100)}%`
 
@@ -24,20 +31,33 @@ export function BrushPanel() {
   const brush = useEditorStore((s) => s.brush)
   const invert = useEditorStore((s) => s.invertToggle)
   const terraceStep = useEditorStore((s) => s.terraceStep)
+  const volumetric = useEditorStore((s) => s.scene.mapMode === 'volumetric')
   const { setTerrainMode, setBiome, setBrush, setInvertToggle, setTerraceStep } = useEditorStore.getState()
   if (!isBrushTool(tool)) return null
 
   return (
     <div className="brush-panel" aria-label="Brush">
       {tool === 'terrain' ? (
-        <div role="radiogroup" aria-label="Terrain mode" className="choice-group">
-          {MODES.map(({ id, label }) => (
-            <label key={id} className="choice">
-              <input type="radio" name="terrain-mode" checked={terrainMode === id} onChange={() => setTerrainMode(id)} />
-              {label}
-            </label>
-          ))}
-        </div>
+        <>
+          <div role="radiogroup" aria-label="Terrain mode" className="choice-group">
+            {MODES.map(({ id, label }) => (
+              <label key={id} className="choice">
+                <input type="radio" name="terrain-mode" checked={terrainMode === id} onChange={() => setTerrainMode(id)} />
+                {label}
+              </label>
+            ))}
+          </div>
+          {volumetric && (
+            <div role="radiogroup" aria-label="3D" className="choice-group">
+              {MODES_3D.map(({ id, label }) => (
+                <label key={id} className="choice">
+                  <input type="radio" name="terrain-mode" checked={terrainMode === id} onChange={() => setTerrainMode(id)} />
+                  {label}
+                </label>
+              ))}
+            </div>
+          )}
+        </>
       ) : (
         <div role="radiogroup" aria-label="Biome" className="choice-group">
           {BIOME_IDS.map((id) => (
@@ -70,7 +90,7 @@ export function BrushPanel() {
           type="range"
           aria-label="Size"
           min={BRUSH_RADIUS_MIN}
-          max={BRUSH_RADIUS_MAX}
+          max={tool === 'terrain' && is3dMode(terrainMode) ? RADIUS_3D_MAX : BRUSH_RADIUS_MAX}
           step={0.5}
           value={brush.radius}
           onChange={(e) => setBrush({ radius: Number(e.target.value) })}

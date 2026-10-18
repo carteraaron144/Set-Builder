@@ -107,9 +107,9 @@ export default function App() {
       {dialog === 'new' && (
         <NewSceneDialog
           onCancel={() => setDialog(null)}
-          onCreate={(name, size) => {
+          onCreate={(name, size, mapMode) => {
             setDialog(null)
-            newScene(deps, name, size)
+            newScene(deps, name, size, mapMode)
           }}
         />
       )}

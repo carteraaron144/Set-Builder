@@ -8,6 +8,7 @@ import {
   type BrushSettings,
   type TerrainMode,
 } from '../terrain/brush'
+import { is3dMode, RADIUS_3D_MAX } from '../terrain/brush3d'
 import { createFlatLayers, type BiomeId, type TerrainLayers } from '../terrain/layers'
 import { TerrainEditor } from '../terrain/terrainEditor'
 import { scaleSelectedPoint } from './pointScale'
@@ -85,7 +86,7 @@ export interface EditorState {
   setTool(t: ToolId | null): void
   setTerrainMode(m: TerrainMode): void
   setBiome(b: BiomeId): void
-  /** Clamps radius to 1..50 m and strength and falloff to 0..1. */
+  /** Clamps radius to 1..50 m (1..12 m for the 3D modes) and strength and falloff to 0..1. */
   setBrush(p: Partial<BrushSettings>): void
   resizeBrush(factor: number): void
   setInvertToggle(v: boolean): void
@@ -105,6 +106,9 @@ export interface EditorState {
 }
 
 const clamp = (v: number, min: number, max: number) => Math.min(max, Math.max(min, v))
+
+/** The largest brush for a tool and mode: 3D modes are limited to 12 m. */
+const radiusMax = (tool: ToolId | null, mode: TerrainMode) => (tool === 'terrain' && is3dMode(mode) ? RADIUS_3D_MAX : BRUSH_RADIUS_MAX)
 
 const initializer =
   (initialScene: () => Scene) =>
@@ -144,14 +148,15 @@ const initializer =
       canRedo: false,
       currentScene: () => ({ ...get().scene, features: get().terrain.features }),
       replaceScene: (next, layers) =>
-        set({
+        set((s) => ({
+          terrainMode: next.mapMode !== 'volumetric' && is3dMode(s.terrainMode) ? 'raise' : s.terrainMode,
           scene: next,
           terrain: terrainFor(next, layers ?? createFlatLayers(next.size)),
           dirty: false,
           selection: null,
           canUndo: false,
           canRedo: false,
-        }),
+        })),
       rename: (name) => {
         const { scene: current } = get()
         const renamed = renameScene(current, name)
@@ -161,14 +166,19 @@ const initializer =
       markSaved: () => set({ dirty: false }),
       setRenderBackend: (renderBackend) => set({ renderBackend }),
       setMessage: (message) => set({ message }),
-      setTool: (tool) => set({ tool, selection: null }),
-      setTerrainMode: (terrainMode) => set({ terrainMode }),
+      setTool: (tool) =>
+        set((s) => ({ tool, selection: null, brush: { ...s.brush, radius: Math.min(s.brush.radius, radiusMax(tool, s.terrainMode)) } })),
+      setTerrainMode: (terrainMode) => {
+        // The 3D modes belong to volumetric maps.
+        if (is3dMode(terrainMode) && get().scene.mapMode !== 'volumetric') return
+        set((s) => ({ terrainMode, brush: { ...s.brush, radius: Math.min(s.brush.radius, radiusMax(s.tool, terrainMode)) } }))
+      },
       setBiome: (biome) => set({ biome }),
       setBrush: (p) => {
         const b = { ...get().brush, ...p }
         set({
           brush: {
-            radius: clamp(b.radius, BRUSH_RADIUS_MIN, BRUSH_RADIUS_MAX),
+            radius: clamp(b.radius, BRUSH_RADIUS_MIN, radiusMax(get().tool, get().terrainMode)),
             strength: clamp(b.strength, 0, 1),
             falloff: clamp(b.falloff, 0, 1),
           },
