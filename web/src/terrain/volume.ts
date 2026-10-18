@@ -53,7 +53,11 @@ export class VolumeLayer {
   /** Brick y-levels present per (bx, bz) column. */
   private columns = new Map<number, Set<number>>()
 
-  constructor(readonly size: SceneSize) {}
+  readonly size: SceneSize
+
+  constructor(size: SceneSize) {
+    this.size = size
+  }
 
   get count(): number {
     return this.bricks.size

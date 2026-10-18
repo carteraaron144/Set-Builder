@@ -6,8 +6,11 @@ import type { Vec3 } from '../terrain/pick'
 import { hash4, unit } from './hash'
 import type { ScatterRule, ScatterRules } from './rules'
 
+/** The layers scatter reads: the sculpted volume reaches it through `levels`. */
+export type ScatterLayers = Pick<TerrainLayers, 'heights' | 'biomes'>
+
 export interface ScatterInputs {
-  layers: TerrainLayers
+  layers: ScatterLayers
   seed: number
   rules: ScatterRules
   /** 1 m grid like the biome map; non-zero means no scatter. Null in M2. */

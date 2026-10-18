@@ -8,7 +8,7 @@ function emptyBrick(): Brick {
 
 describe('brick keys', () => {
   it('round-trips signed Int16 coordinates', () => {
-    for (const c of [[-4, -4, -4], [0, 0, 0], [63, 15, 63], [-32768, 32767, -1]] as const) {
+    for (const c of [[-4, -4, -4], [0, 0, 0], [63, 15, 63], [-32768, 32767, -1]] as [number, number, number][]) {
       expect(unpackKey(brickKey(...c))).toEqual([...c])
     }
   })

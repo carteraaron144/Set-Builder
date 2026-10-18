@@ -57,7 +57,7 @@ export function sculpt3d(
   const [k0, k1] = range(dab.y, 0, kMin, kMax)
 
   const changes: Change[] = []
-  const planned = new Map<number, Brick | null>()
+  const planned = new Map<number, Brick>()
   const read = (vi: number, vk: number, vj: number, channel: 'a' | 'k') => {
     const brick = v.get(brickKey(vi >> 3, vk >> 3, vj >> 3))
     return brick ? brick[channel][((vk & 7) * BRICK + (vj & 7)) * BRICK + (vi & 7)] : DEFAULT_UNITS

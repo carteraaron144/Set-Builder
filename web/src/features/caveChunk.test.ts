@@ -80,7 +80,7 @@ interface Tri {
   verts: [number, number, number]
 }
 
-function triangles(m: { positions: Float32Array; indices: Uint32Array }): Tri[] {
+function triangles(m: { positions: Float32Array; indices: ArrayLike<number> }): Tri[] {
   const out: Tri[] = []
   const p = m.positions
   for (let f = 0; f < m.indices.length; f += 3) {

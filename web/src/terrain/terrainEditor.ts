@@ -29,7 +29,7 @@ interface Stroke {
 const union = (a: Rect | null, b: Rect): Rect =>
   a ? { x0: Math.min(a.x0, b.x0), z0: Math.min(a.z0, b.z0), x1: Math.max(a.x1, b.x1), z1: Math.max(a.z1, b.z1) } : b
 
-function sameValues(a: Float32Array | Uint8Array, b: Float32Array | Uint8Array): boolean {
+function sameValues(a: ArrayLike<number>, b: ArrayLike<number>): boolean {
   for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false
   return true
 }
