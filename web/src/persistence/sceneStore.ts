@@ -1,7 +1,8 @@
 import { openDB, type DBSchema, type IDBPDatabase } from 'idb'
 import type { Scene, SceneSize } from '../scene/scene'
-import { layersFromBuffers, parseScene, type SceneFileContents } from '../scene/sceneFile'
+import { checkMapMode, layersFromBuffers, parseScene, type SceneFileContents } from '../scene/sceneFile'
 import { createFlatLayers, type TerrainLayers } from '../terrain/layers'
+import { encodeVolume } from '../terrain/volumeCodec'
 
 export interface SceneSummary {
   id: string
@@ -36,6 +37,8 @@ interface LayersRecord {
   id: string
   heights: ArrayBuffer
   biomes: ArrayBuffer
+  /** Absent for scenes without bricks and for records saved before format 5. */
+  volume?: ArrayBuffer
 }
 
 interface SetBuilderDB extends DBSchema {
@@ -91,7 +94,12 @@ export async function openSceneStore(dbName = 'set-builder'): Promise<SceneStore
         tx.objectStore(SCENES).put(scene),
         tx
           .objectStore(LAYERS)
-          .put({ id: scene.id, heights: layers.heights.data.slice().buffer, biomes: layers.biomes.data.slice().buffer }),
+          .put({
+            id: scene.id,
+            heights: layers.heights.data.slice().buffer,
+            biomes: layers.biomes.data.slice().buffer,
+            ...(layers.volume.count > 0 && { volume: encodeVolume(layers.volume).buffer as ArrayBuffer }),
+          }),
         tx.done,
       ])
     },
@@ -101,7 +109,9 @@ export async function openSceneStore(dbName = 'set-builder'): Promise<SceneStore
       const record = await db.get(LAYERS, id)
       // Scenes saved before layers existed (M0) are flat, all meadow.
       if (!record) return { scene, layers: createFlatLayers(scene.size) }
-      return { scene, layers: layersFromBuffers(scene.size, record.heights, record.biomes) }
+      const layers = layersFromBuffers(scene.size, record.heights, record.biomes, record.volume)
+      checkMapMode(scene, layers)
+      return { scene, layers }
     },
     async list() {
       const scenes = (await db.getAll(SCENES)).map(tryParse).filter((s): s is Scene => s !== undefined)

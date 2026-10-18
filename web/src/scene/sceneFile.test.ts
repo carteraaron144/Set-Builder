@@ -2,6 +2,7 @@ import { strToU8, zipSync } from 'fflate'
 import { describe, expect, it } from 'vitest'
 import { paint, sculpt } from '../terrain/brush'
 import { createFlatLayers, type TerrainLayers } from '../terrain/layers'
+import { brickKey } from '../terrain/volume'
 import { createScene, type Scene } from './scene'
 import {
   layersFromBuffers,
@@ -65,16 +66,16 @@ describe('scene file', () => {
   it('opens a v1 file as flat meadow', () => {
     const { generatorVersion: _g, ...v1 } = { ...scene, formatVersion: 1 }
     const read = readSceneFile(zipWith({ 'scene.json': JSON.stringify(v1) }))
-    expect(read.scene).toEqual({ ...scene, formatVersion: 4, generatorVersion: 4 })
+    expect(read.scene).toEqual({ ...scene, formatVersion: 5, generatorVersion: 5 })
     expect(same(read.layers.heights.data, createFlatLayers(64).heights.data)).toBe(true)
     expect(same(read.layers.biomes.data, createFlatLayers(64).biomes.data)).toBe(true)
   })
 
-  it('opens a v2 scene as v4 with no features', () => {
+  it('opens a v2 scene as v5 with no features', () => {
     const { features: _f, ...rest } = scene
     for (const generatorVersion of [1, 2]) {
       const read = readSceneFile(v2Zip({ 'scene.json': JSON.stringify({ ...rest, formatVersion: 2, generatorVersion }) }))
-      expect(read.scene).toEqual({ ...scene, formatVersion: 4, generatorVersion: 4, features: { splines: [], ponds: [], caves: [] } })
+      expect(read.scene).toEqual({ ...scene, formatVersion: 5, generatorVersion: 5, features: { splines: [], ponds: [], caves: [] } })
     }
   })
 
@@ -93,13 +94,13 @@ describe('scene file', () => {
     expect(readSceneFile(writeSceneFile(withFeatures, shapedLayers())).scene).toEqual(withFeatures)
   })
 
-  it('opens a v3 scene as v4 with no caves', () => {
+  it('opens a v3 scene as v5 with no caves', () => {
     const v3 = { ...scene, formatVersion: 3, generatorVersion: 3, features: { splines: [], ponds: [{ id: 'w', seed: { x: 0, z: 0 }, level: 1 }] } }
     expect(parseScene(v3)).toEqual({ ...scene, features: { splines: [], ponds: [{ id: 'w', seed: { x: 0, z: 0 }, level: 1 }], caves: [] } })
   })
 
   it('reports a newer scene format', () => {
-    expect(reasonOf(() => parseScene({ ...scene, formatVersion: 5 }))).toBe('newer-version')
+    expect(reasonOf(() => parseScene({ ...scene, formatVersion: 6 }))).toBe('newer-version')
   })
 
   it('clamps feature widths on load', () => {
@@ -117,7 +118,7 @@ describe('scene file', () => {
   })
 
   it('reports a scene made by a newer generator instead of opening it', () => {
-    expect(reasonOf(() => readSceneFile(v2Zip({ 'scene.json': JSON.stringify({ ...scene, generatorVersion: 5 }) })))).toBe('newer-version')
+    expect(reasonOf(() => readSceneFile(v2Zip({ 'scene.json': JSON.stringify({ ...scene, generatorVersion: 6 }) })))).toBe('newer-version')
   })
 
   it('rejects bytes that are not a zip', () => {
@@ -143,8 +144,8 @@ describe('scene file', () => {
   })
 
   it('reports a newer format version before checking the shape', () => {
-    expect(reasonOf(() => parseScene({ formatVersion: 5 }))).toBe('newer-version')
-    expect(reasonOf(() => readSceneFile(v2Zip({ 'scene.json': JSON.stringify({ ...scene, formatVersion: 5 }) })))).toBe(
+    expect(reasonOf(() => parseScene({ formatVersion: 6 }))).toBe('newer-version')
+    expect(reasonOf(() => readSceneFile(v2Zip({ 'scene.json': JSON.stringify({ ...scene, formatVersion: 6 }) })))).toBe(
       'newer-version',
     )
   })
@@ -183,5 +184,31 @@ describe('scene file', () => {
     const e = new SceneFileError('invalid-layers')
     expect(e).toBeInstanceOf(Error)
     expect(e.reason).toBe('invalid-layers')
+  })
+
+  it('round-trips bricks in a volumetric scene', () => {
+    const vol = createScene({ size: 64, mapMode: 'volumetric', now: new Date('2026-10-15T12:00:00Z'), id: 'v', seed: 7 })
+    const l = createFlatLayers(64)
+    l.volume.put(brickKey(3, 1, 4), { a: new Int8Array(512).fill(20), k: new Int8Array(512).fill(-64) })
+    l.volume.put(brickKey(0, -2, 9), { a: new Int8Array(512).fill(-64), k: new Int8Array(512).fill(5) })
+    const read = readSceneFile(writeSceneFile(vol, l))
+    expect(read.scene.mapMode).toBe('volumetric')
+    expect(read.layers.volume.count).toBe(2)
+    expect(read.layers.volume.get(brickKey(3, 1, 4))!.a[0]).toBe(20)
+    expect(read.layers.volume.get(brickKey(0, -2, 9))!.k[511]).toBe(5)
+  })
+
+  it('opens a v4 scene as a heightmap scene with no bricks', () => {
+    const { mapMode: _m, ...rest } = scene
+    const read = readSceneFile(v2Zip({ 'scene.json': JSON.stringify({ ...rest, formatVersion: 4, generatorVersion: 4 }) }))
+    expect(read.scene).toMatchObject({ formatVersion: 5, generatorVersion: 5, mapMode: 'heightmap' })
+    expect(read.layers.volume.count).toBe(0)
+  })
+
+  it('rejects bricks in a heightmap scene, and a malformed volume entry', () => {
+    const l = createFlatLayers(64)
+    l.volume.put(brickKey(1, 1, 1), { a: new Int8Array(512).fill(3), k: new Int8Array(512).fill(-64) })
+    expect(reasonOf(() => readSceneFile(writeSceneFile(scene, l)))).toBe('invalid-layers')
+    expect(reasonOf(() => readSceneFile(v2Zip({ 'volume.i8': new Uint8Array(7) })))).toBe('invalid-layers')
   })
 })

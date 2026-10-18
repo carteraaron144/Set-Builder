@@ -5,6 +5,7 @@ import { createScene, type SceneSize } from '../scene/scene'
 import { SceneFileError } from '../scene/sceneFile'
 import { sculpt } from '../terrain/brush'
 import { createFlatLayers } from '../terrain/layers'
+import { brickKey } from '../terrain/volume'
 import { openSceneStore, StorageUnavailableError } from './sceneStore'
 
 let dbCounter = 0
@@ -109,7 +110,7 @@ describe('SceneStore', () => {
     const store = await openSceneStore(dbName)
     expect((await store.list()).map((s) => s.id)).toEqual(['m0'])
     const loaded = await store.load('m0')
-    expect(loaded?.scene).toMatchObject({ id: 'm0', formatVersion: 4, generatorVersion: 4, size: 128 })
+    expect(loaded?.scene).toMatchObject({ id: 'm0', formatVersion: 5, generatorVersion: 5, size: 128 })
     expect(same(loaded!.layers.heights.data, createFlatLayers(128).heights.data)).toBe(true)
   })
 
@@ -144,5 +145,24 @@ describe('SceneStore', () => {
     const newer = await openDB(dbName, 3)
     expect(newer.version).toBe(3)
     newer.close()
+  })
+
+  it('keeps bricks through a save and load, and loads an old record without volume empty', async () => {
+    const name = freshDbName()
+    const store = await openSceneStore(name)
+    const vol = createScene({ id: 'vol', size: 64, mapMode: 'volumetric', now: new Date('2026-10-15T12:00:00Z'), seed: 1 })
+    const l = createFlatLayers(64)
+    l.volume.put(brickKey(2, 3, 4), { a: new Int8Array(512).fill(9), k: new Int8Array(512).fill(-64) })
+    await store.save(vol, l)
+    const loaded = await store.load('vol')
+    expect(loaded?.scene.mapMode).toBe('volumetric')
+    expect(loaded?.layers.volume.get(brickKey(2, 3, 4))!.a[100]).toBe(9)
+    const plain = sceneAt('plain', '2026-10-15T12:00:00Z')
+    await store.save(plain, createFlatLayers(64))
+    const db = await openDB(name, 2)
+    const record = await db.get('layers', 'plain')
+    expect(record.volume).toBeUndefined()
+    db.close()
+    expect((await store.load('plain'))?.layers.volume.count).toBe(0)
   })
 })

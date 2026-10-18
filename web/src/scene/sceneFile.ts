@@ -8,6 +8,7 @@ import {
   type TerrainLayers,
 } from '../terrain/layers'
 import { emptyFeatures, featuresSchema } from '../features/features'
+import { decodeVolume, encodeVolume } from '../terrain/volumeCodec'
 import { GENERATOR_VERSION, SCENE_FORMAT_VERSION, SCENE_SIZES, type Scene, type SceneSize } from './scene'
 
 /** A project file is a zip of scene.json plus the layer blobs. */
@@ -16,6 +17,7 @@ export const SCENE_FILE_EXTENSION = '.setbuilder'
 const SCENE_JSON = 'scene.json'
 const HEIGHTMAP = 'heightmap.f32'
 const BIOMES = 'biomes.rgba8'
+const VOLUME = 'volume.i8'
 
 export type SceneFileErrorReason =
   | 'not-a-zip'
@@ -49,8 +51,9 @@ const sceneFields = {
 const v1Schema = z.object({ formatVersion: z.literal(1), ...sceneFields })
 const v2Schema = z.object({ formatVersion: z.literal(2), generatorVersion: z.number().int().min(1), ...sceneFields })
 const v3Schema = z.object({
-  formatVersion: z.union([z.literal(3), z.literal(SCENE_FORMAT_VERSION)]),
+  formatVersion: z.union([z.literal(3), z.literal(4), z.literal(SCENE_FORMAT_VERSION)]),
   generatorVersion: z.number().int().min(1),
+  mapMode: z.enum(['heightmap', 'volumetric']).optional(),
   ...sceneFields,
   features: z.unknown(),
 })
@@ -77,30 +80,36 @@ export function parseScene(data: unknown): Scene {
   if (version === 1) {
     const v1 = v1Schema.safeParse(data)
     if (!v1.success) throw new SceneFileError('invalid-scene', v1.error.message)
-    return { ...v1.data, formatVersion: SCENE_FORMAT_VERSION, generatorVersion: GENERATOR_VERSION, features: emptyFeatures() }
+    return { ...v1.data, formatVersion: SCENE_FORMAT_VERSION, generatorVersion: GENERATOR_VERSION, mapMode: 'heightmap', features: emptyFeatures() }
   }
   if (version === 2) {
     const v2 = v2Schema.safeParse(data)
     if (!v2.success) throw new SceneFileError('invalid-scene', v2.error.message)
     checkGenerator(v2.data.generatorVersion)
-    // Generators 2–4 differ only in features, which v2 scenes don't have, so they upgrade in place.
-    return { ...v2.data, formatVersion: SCENE_FORMAT_VERSION, generatorVersion: GENERATOR_VERSION, features: emptyFeatures() }
+    // Generators 2–5 differ only in features and volume, which v2 scenes don't have, so they upgrade in place.
+    return { ...v2.data, formatVersion: SCENE_FORMAT_VERSION, generatorVersion: GENERATOR_VERSION, mapMode: 'heightmap', features: emptyFeatures() }
   }
   const result = v3Schema.safeParse(data)
   if (!result.success) throw new SceneFileError('invalid-scene', result.error.message)
   checkGenerator(result.data.generatorVersion)
   const features = featuresSchema(result.data.size).safeParse(result.data.features)
   if (!features.success) throw new SceneFileError('invalid-scene', features.error.message)
-  // Format 3 and generator 3 differ from 4 only in caves, which v3 scenes don't have, so they upgrade in place.
-  if (result.data.formatVersion === 3) return { ...result.data, formatVersion: SCENE_FORMAT_VERSION, generatorVersion: GENERATOR_VERSION, features: features.data } as Scene
-  return { ...result.data, features: features.data } as Scene
+  // Formats 3 and 4 (and their generators) differ from 5 only in caves and bricks, which they don't have, so they upgrade in place.
+  const upgraded = result.data.formatVersion < SCENE_FORMAT_VERSION
+  return {
+    ...result.data,
+    formatVersion: SCENE_FORMAT_VERSION,
+    generatorVersion: upgraded ? GENERATOR_VERSION : result.data.generatorVersion,
+    mapMode: result.data.mapMode ?? 'heightmap',
+    features: features.data,
+  } as Scene
 }
 
 /**
  * Validates layer blobs for a scene size. Wrong or missing lengths and non-finite heights are rejected;
  * out-of-range heights are clamped and biome samples renormalised to sum to 255.
  */
-export function layersFromBuffers(size: SceneSize, heights: ArrayBuffer | undefined, biomes: ArrayBuffer | undefined): TerrainLayers {
+export function layersFromBuffers(size: SceneSize, heights: ArrayBuffer | undefined, biomes: ArrayBuffer | undefined, volume?: ArrayBuffer): TerrainLayers {
   const layers = createFlatLayers(size)
   const h = layers.heights.data
   const b = layers.biomes.data
@@ -118,7 +127,13 @@ export function layersFromBuffers(size: SceneSize, heights: ArrayBuffer | undefi
     if (sum === 0) b.set([255, 0, 0, 0], i)
     else quantizeWeights([b[i] / sum, b[i + 1] / sum, b[i + 2] / sum, b[i + 3] / sum], b, i)
   }
+  layers.volume = decodeVolume(size, volume && new Uint8Array(volume))
   return layers
+}
+
+/** A heightmap scene can't hold bricks: they would show up with no way to edit them. */
+export function checkMapMode(scene: Scene, layers: TerrainLayers): void {
+  if (scene.mapMode === 'heightmap' && layers.volume.count > 0) throw new SceneFileError('invalid-layers', 'a heightmap scene has volume bricks')
 }
 
 const bytesOf = (a: Float32Array | Uint8Array) => new Uint8Array(a.buffer, a.byteOffset, a.byteLength)
@@ -138,6 +153,7 @@ export function writeSceneFile(scene: Scene, layers: TerrainLayers): Uint8Array 
       [SCENE_JSON]: strToU8(JSON.stringify(scene, null, 2)),
       [HEIGHTMAP]: bytesOf(layers.heights.data),
       [BIOMES]: bytesOf(layers.biomes.data),
+      [VOLUME]: encodeVolume(layers.volume),
     },
     { level: 6 },
   )
@@ -161,5 +177,7 @@ export function readSceneFile(bytes: Uint8Array): SceneFileContents {
   const scene = parseScene(data)
   // v1 files predate layers: flat, all meadow.
   if (formatVersionOf(data) === 1) return { scene, layers: createFlatLayers(scene.size) }
-  return { scene, layers: layersFromBuffers(scene.size, ownBuffer(files[HEIGHTMAP]), ownBuffer(files[BIOMES])) }
+  const layers = layersFromBuffers(scene.size, ownBuffer(files[HEIGHTMAP]), ownBuffer(files[BIOMES]), ownBuffer(files[VOLUME]))
+  checkMapMode(scene, layers)
+  return { scene, layers }
 }

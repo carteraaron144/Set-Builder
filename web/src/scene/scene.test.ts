@@ -6,16 +6,21 @@ const NOW = new Date('2026-10-15T12:00:00Z')
 describe('createScene', () => {
   it('builds a scene from explicit values', () => {
     expect(createScene({ size: 128, now: NOW, id: 'a', seed: 7 })).toEqual({
-      formatVersion: 4,
-      generatorVersion: 4,
+      formatVersion: 5,
+      generatorVersion: 5,
       id: 'a',
       name: 'Untitled scene',
       size: 128,
+      mapMode: 'heightmap',
       seed: 7,
       createdAt: '2026-10-15T12:00:00.000Z',
       updatedAt: '2026-10-15T12:00:00.000Z',
       features: { splines: [], ponds: [], caves: [] },
     })
+  })
+
+  it('records a volumetric map mode', () => {
+    expect(createScene({ size: 64, mapMode: 'volumetric' }).mapMode).toBe('volumetric')
   })
 
   it('generates a UUID id and a 32-bit unsigned integer seed', () => {
@@ -38,8 +43,8 @@ describe('createScene', () => {
 
   it('exposes the sizes and format version', () => {
     expect(SCENE_SIZES).toEqual([64, 128, 256])
-    expect(SCENE_FORMAT_VERSION).toBe(4)
-    expect(GENERATOR_VERSION).toBe(4)
+    expect(SCENE_FORMAT_VERSION).toBe(5)
+    expect(GENERATOR_VERSION).toBe(5)
   })
 })
 
