@@ -14,7 +14,7 @@ import {
 } from './layers'
 import { valueNoise2 } from './noise'
 
-export type TerrainMode = 'raise' | 'lower' | 'smooth' | 'flatten' | 'noise' | 'terrace'
+export type TerrainMode = 'raise' | 'lower' | 'smooth' | 'flatten' | 'noise' | 'terrace' | 'add' | 'carve' | 'smooth3d'
 
 /** radius in metres; strength and falloff 0..1. */
 export interface BrushSettings {
