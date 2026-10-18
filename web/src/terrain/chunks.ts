@@ -79,12 +79,9 @@ export function buildChunkGeometry(l: TerrainLayers, chunk: number, p: TerrainPa
  * the surface colour blended in by weight/255.
  */
 export function terrainColorAt(l: TerrainLayers, i: number, j: number, p: TerrainPalette, surface: SurfaceMap | undefined, out: Float32Array, k: number): void {
-  const { heights, biomes } = l
+  const { heights } = l
   const res = heights.resolution
   const h = heights.data
-  const b = biomes.data
-  const bRes = biomes.resolution
-  const pb = p.biomes
   // Slope from central differences (one-sided at the scene edge).
   const il = Math.max(0, i - 1)
   const ir = Math.min(res - 1, i + 1)
@@ -92,7 +89,16 @@ export function terrainColorAt(l: TerrainLayers, i: number, j: number, p: Terrai
   const ju = Math.min(res - 1, j + 1)
   const dx = (h[j * res + ir] - h[j * res + il]) / ((ir - il) * HEIGHT_SPACING)
   const dz = (h[ju * res + i] - h[jd * res + i]) / ((ju - jd) * HEIGHT_SPACING)
-  const slope = Math.atan(Math.hypot(dx, dz))
+  terrainColorWithSlope(l, i, j, p, surface, Math.atan(Math.hypot(dx, dz)), out, k)
+}
+
+/** As `terrainColorAt`, with the slope (radians from flat) given instead of read from the heightmap. */
+export function terrainColorWithSlope(l: TerrainLayers, i: number, j: number, p: TerrainPalette, surface: SurfaceMap | undefined, slope: number, out: Float32Array, k: number): void {
+  const { heights, biomes } = l
+  const res = heights.resolution
+  const b = biomes.data
+  const bRes = biomes.resolution
+  const pb = p.biomes
   const earth = smoothstep(p.earth.start, p.earth.full, slope)
   const rock = smoothstep(p.rock.start, p.rock.full, slope)
 

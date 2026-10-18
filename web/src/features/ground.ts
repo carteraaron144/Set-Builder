@@ -1,8 +1,9 @@
 import { buildChunkGeometry, CHUNK_VERTS, chunkCount, type ChunkGeometry } from '../terrain/chunks'
 import { BIOME_SPACING, clipRect, HEIGHT_SPACING, heightAt, type Rect, type TerrainLayers } from '../terrain/layers'
 import { DEFAULT_PALETTE, type TerrainPalette } from '../terrain/palette'
+import { VALUE_LIMIT } from '../terrain/volume'
 import { raycastTerrain, type Vec3 } from '../terrain/pick'
-import { buildCaveChunk } from './caveChunk'
+import { buildSdfChunk } from './caveChunk'
 import { caveGlowChunk } from './caveGlow'
 import { cavesReaching, profileCave, smoothMin, type CaveProfile } from './caves'
 import { carveRect, exclusionRect, profileSpline, SURFACE, type SplineProfile, type SurfaceMap } from './carve'
@@ -170,6 +171,7 @@ export class Ground {
     if (volume.count === 0) return smoothMin(h - y, cave, FEATURES.cave.groundBlend)
     const ab = this.volumeAB
     volume.sample(x, y, z, ab)
+    if (ab.a === -VALUE_LIMIT && ab.k === -VALUE_LIMIT) return smoothMin(h - y, cave, FEATURES.cave.groundBlend)
     let s = Math.min(Math.max(h - y, ab.a), -ab.k)
     const { resolution, size } = this.layers.heights
     const i = Math.min(resolution - 1, Math.max(0, Math.round((x + size / 2) / HEIGHT_SPACING)))
@@ -216,8 +218,8 @@ export class Ground {
   /** The chunk's mesh: the heightmap grid, or the density field's surface where caves reach it (unless `ignoreCaves`). */
   chunkGeometry(chunk: number, palette: TerrainPalette = DEFAULT_PALETTE, ignoreCaves = false): ChunkGeometry {
     const caves = ignoreCaves ? [] : this.cavesOf(chunk)
-    if (caves.length === 0) return buildChunkGeometry(this.layers, chunk, palette, this.surface)
-    return buildCaveChunk(this.layers, this.surface, caves, chunk, palette)
+    if (caves.length === 0 && !this.hasVolume(chunk)) return buildChunkGeometry(this.layers, chunk, palette, this.surface)
+    return buildSdfChunk(this.layers, this.surface, caves, chunk, palette)
   }
 
   /** The caves alone, meshed inside chunk `chunk` (for a see-through glow); null if no cave reaches it. */

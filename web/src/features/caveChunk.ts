@@ -1,14 +1,17 @@
-import { CHUNK_VERTS, chunkCount, terrainColorAt, type ChunkGeometry } from '../terrain/chunks'
+import { CHUNK_VERTS, chunkCount, terrainColorAt, terrainColorWithSlope, type ChunkGeometry } from '../terrain/chunks'
 import { HEIGHT_SPACING, type TerrainLayers } from '../terrain/layers'
 import { hexToLinear, type TerrainPalette } from '../terrain/palette'
 import { meshSdfChunk } from '../terrain/sdfChunk'
-import type { SurfaceMap } from './carve'
+import { VALUE_LIMIT } from '../terrain/volume'
+import { SURFACE, type SurfaceMap } from './carve'
 import { smoothMin, type CaveProfile } from './caves'
 import { FEATURES } from './features'
 
 const ROCK = hexToLinear(FEATURES.cave.rockColor)
 const FLOOR = hexToLinear(FEATURES.cave.floorColor)
 const { groundBlend } = FEATURES.cave
+/** A path's corridor is air from its surface up to this height (metres). */
+const PATH_CLEARANCE = 4
 
 /**
  * Cave distances on one chunk's lattice, filled in as they are asked for. Cave distance doesn't depend on the
@@ -47,11 +50,12 @@ export interface CaveDistanceHolder {
 }
 
 /**
- * Meshes a chunk that caves reach from the density smooth-min(ground − y, cave distance), which rounds the rim
- * where a cave breaks the surface. Ground vertices take the
- * heightmap colours of their lattice edge; cave vertices are rock, or moss where they face up.
+ * Meshes a chunk that caves or sculpted bricks reach from the density
+ * smooth-min(min(max(ground − y, A), −K, −path clearance), cave distance), which rounds the rim where a cave
+ * breaks the surface. Ground vertices take the heightmap colours of their lattice edge; cave vertices are rock,
+ * or moss where they face up; vertices over a brick are shaded from their true normal (earth under an overhang).
  */
-export function buildCaveChunk(layers: TerrainLayers, surface: SurfaceMap, caves: CaveProfile[], chunk: number, p: TerrainPalette, holder?: CaveDistanceHolder): ChunkGeometry {
+export function buildSdfChunk(layers: TerrainLayers, surface: SurfaceMap, caves: CaveProfile[], chunk: number, p: TerrainPalette, holder?: CaveDistanceHolder): ChunkGeometry {
   const { size, resolution: res, data: h } = layers.heights
   const half = size / 2
   const n = chunkCount(size)
@@ -69,6 +73,23 @@ export function buildCaveChunk(layers: TerrainLayers, surface: SurfaceMap, caves
     }
   for (const c of caves) lo = Math.min(lo, c.bounds.y0)
 
+  // Sculpted bricks widen the range up and down, and the band per column below.
+  const volume = layers.volume
+  const useVolume = volume.count > 0
+  const ab = { a: 0, k: 0 }
+  const onPath = (i: number, j: number) => surface.kind[Math.min(res - 1, Math.max(0, j)) * res + Math.min(res - 1, Math.max(0, i))] !== SURFACE.none
+  if (useVolume) {
+    for (let j = cj - 1; j <= cj + cells + 1; j++)
+      for (let i = ci - 1; i <= ci + cells + 1; i++) {
+        const r = volume.columnRange(i, j)
+        if (r) {
+          lo = Math.min(lo, r[0] - 2)
+          hi = Math.max(hi, r[1] + 2)
+        }
+        if (onPath(i, j)) hi = Math.max(hi, h[Math.min(res - 1, Math.max(0, j)) * res + Math.min(res - 1, Math.max(0, i))] + PATH_CLEARANCE)
+      }
+  }
+
   const caveAt = (x: number, y: number, z: number) => {
     let d = Infinity
     for (const c of caves) d = Math.min(d, c.sdf(x, y, z))
@@ -82,15 +103,24 @@ export function buildCaveChunk(layers: TerrainLayers, surface: SurfaceMap, caves
   const band = (i: number, j: number): readonly [number, number] => {
     const ground = h[clampIndex(j) * res + clampIndex(i)]
     let floor = ground - 1
+    let top = ground
     for (const c of caves) {
       const fp = c.footprint
       if (fp && i >= fp.x0 && i <= fp.x1 && j >= fp.z0 && j <= fp.z1) floor = Math.min(floor, c.bounds.y0 - caveDepth)
     }
-    return [floor, ground]
+    if (useVolume) {
+      const r = volume.columnRange(i, j)
+      if (r) {
+        floor = Math.min(floor, r[0] - 2)
+        top = Math.max(top, r[1] + 2)
+      }
+      if (onPath(i, j)) top = Math.max(top, ground + PATH_CLEARANCE)
+    }
+    return [floor, top]
   }
   const caveAtLattice = (i: number, j: number, y: number) => caveAt(wx(i), y, wx(j))
   let distances = holder?.cache ?? null
-  if (holder && !distances) {
+  if (holder && !distances && caves.length > 0) {
     let y0 = Infinity
     let y1 = -Infinity
     for (const c of caves) {
@@ -101,7 +131,17 @@ export function buildCaveChunk(layers: TerrainLayers, surface: SurfaceMap, caves
     distances = holder.cache = new CaveDistanceCache(ci, cj, yMin, Math.ceil((y1 + 1 - yMin) / HEIGHT_SPACING) + 1)
   }
   const caveDistance = distances ? (i: number, j: number, y: number) => distances.at(i, j, y, caveAtLattice) : caveAtLattice
-  const mesh = meshSdfChunk(size, chunk, (i, j, y) => smoothMin(h[j * res + i] - y, caveDistance(i, j, y), groundBlend), lo - 1, hi + 1, band)
+  const density = (i: number, j: number, y: number) => {
+    const ground = h[j * res + i]
+    if (!useVolume) return smoothMin(ground - y, caveDistance(i, j, y), groundBlend)
+    volume.sampleLattice(i, j, y, ab)
+    // Away from every brick the field is exactly the heightmap's (a path's clearance only matters where A reaches over it).
+    if (ab.a === -VALUE_LIMIT && ab.k === -VALUE_LIMIT) return smoothMin(ground - y, caveDistance(i, j, y), groundBlend)
+    let s = Math.min(Math.max(ground - y, ab.a), -ab.k)
+    if (surface.kind[j * res + i] !== SURFACE.none) s = Math.min(s, -Math.min(y - ground, ground + PATH_CLEARANCE - y))
+    return smoothMin(s, caveDistance(i, j, y), groundBlend)
+  }
+  const mesh = meshSdfChunk(size, chunk, density, lo - 1, hi + 1, band)
   const { positions, indices, edgeA, edgeB, t } = mesh
   const count = t.length
 
@@ -153,6 +193,18 @@ export function buildCaveChunk(layers: TerrainLayers, surface: SurfaceMap, caves
       const c = len[v] > 0 && up[v] / len[v] > FEATURES.cave.floorUp ? FLOOR : ROCK
       colors.set(c, k)
       continue
+    }
+    if (useVolume) {
+      // Over a brick the heightmap slope no longer describes the surface: shade from the true normal.
+      const near = t[v] < 0.5 ? a : b
+      const ni = near % res
+      const nj = Math.floor(near / res)
+      if (volume.columnRange(ni, nj)) {
+        const ny = len[v] > 0 ? up[v] / len[v] : 1
+        if (ny < 0) colors.set(p.earth.color, k)
+        else terrainColorWithSlope(layers, ni, nj, p, surface, Math.acos(Math.min(1, ny)), colors, k)
+        continue
+      }
     }
     const ca = colorOf(a)
     const cb = colorOf(b)

@@ -4,6 +4,7 @@ import { createFlatLayers } from '../terrain/layers'
 import { DEFAULT_PALETTE } from '../terrain/palette'
 import { emptyFeatures, type Features } from './features'
 import { caveMeshRequest, meshChunks } from './caveMesh'
+import { brickKey } from '../terrain/volume'
 
 const features: Features = {
   ...emptyFeatures(),
@@ -33,6 +34,27 @@ describe('meshChunks', () => {
       expect(Array.from(r.geometry.positions)).toEqual(Array.from(want.positions))
       expect(Array.from(r.geometry.colors)).toEqual(Array.from(want.colors))
       expect(Array.from(r.geometry.indices)).toEqual(Array.from(want.indices))
+    }
+  })
+
+  it('meshes chunks that bricks reach exactly as the ground does, from copies of the bricks', () => {
+    const layers = createFlatLayers(64)
+    const ed = new TerrainEditor(layers, 7, emptyFeatures(), () => {})
+    const brick = { a: new Int8Array(512).fill(32), k: new Int8Array(512).fill(-64) }
+    layers.volume.put(brickKey(14, 1, 14), brick)
+    layers.volume.put(brickKey(13, 1, 14), { a: brick.a.slice(), k: brick.k.slice() })
+    const g = ed.ground
+    g.refreshVolume()
+    const req = caveMeshRequest(1, g, [0, 1, 2, 3])
+    expect(req.bricks).toHaveLength(2)
+    expect(req.bricks.every((b) => b.a !== brick.a)).toBe(true)
+    const res = meshChunks(req)
+    expect(res.results.find((r) => r.chunk === 3)!.sdf).toBe(true)
+    for (const r of res.results) {
+      const want = g.chunkGeometry(r.chunk, DEFAULT_PALETTE)
+      expect(r.sdf).toBe(g.isSdfChunk(r.chunk))
+      expect(Array.from(r.geometry.positions)).toEqual(Array.from(want.positions))
+      expect(Array.from(r.geometry.colors)).toEqual(Array.from(want.colors))
     }
   })
 
