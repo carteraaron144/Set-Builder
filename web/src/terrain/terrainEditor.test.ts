@@ -323,7 +323,7 @@ describe('TerrainEditor 3D strokes', () => {
   const add: StrokeTool = { tool: 'terrain', mode: 'add' }
   const b3 = { radius: 3, strength: 1, falloff: 0.5 }
 
-  function stroke3(ed: TerrainEditor, y = 5, x = 0, z = 0, tool: StrokeTool = add) {
+  function stroke3(ed: TerrainEditor, y = 0.5, x = 0, z = 0, tool: StrokeTool = add) {
     ed.beginStroke(tool, b3, { x, z })
     const r = ed.dab3({ x, y, z }, 0.1, false)
     ed.endStroke()
@@ -370,9 +370,9 @@ describe('TerrainEditor 3D strokes', () => {
     stroke3(ed)
     const first = snapshot(ed)
     ed.beginStroke(add, b3, { x: 8, z: 8 })
-    expect(ed.dab3({ x: 8, y: 5, z: 8 }, 0.1, false)).toBe('ok')
+    expect(ed.dab3({ x: 8, y: 0.5, z: 8 }, 0.1, false)).toBe('ok')
     ed.undo()
-    expect(ed.dab3({ x: 12, y: 5, z: 12 }, 0.1, false)).toBe('ok')
+    expect(ed.dab3({ x: 12, y: 0.5, z: 12 }, 0.1, false)).toBe('ok')
     ed.endStroke()
     expect(snapshot(ed)).toEqual(first)
     expect(ed.canUndo).toBe(true)
@@ -380,7 +380,7 @@ describe('TerrainEditor 3D strokes', () => {
 
   it('leaves bricks byte-identical across a 2D Raise under a ledge and its undo', () => {
     const { ed } = editor(64)
-    stroke3(ed, 8)
+    stroke3(ed, 1.5)
     const bricks = snapshot(ed)
     stroke(ed, raise, 0, 0)
     expect(snapshot(ed)).toEqual(bricks)
@@ -394,7 +394,7 @@ describe('TerrainEditor 3D strokes', () => {
     filler.a[0] = 0
     for (let n = 0; n < 7999; n++) ed.layers.volume.put(brickKey(-2000 + (n % 100), -100 + Math.floor(n / 100), -2000), { a: filler.a.slice(), k: filler.k.slice() })
     ed.beginStroke(add, b3, { x: 0, z: 0 })
-    expect(ed.dab3({ x: 0, y: 5, z: 0 }, 0.1, false)).toBe('limit')
+    expect(ed.dab3({ x: 0, y: 0.5, z: 0 }, 0.1, false)).toBe('limit')
     ed.endStroke()
     expect(ed.canUndo).toBe(false)
     expect(ed.layers.volume.count).toBe(7999)
@@ -402,10 +402,10 @@ describe('TerrainEditor 3D strokes', () => {
     // A carve in the filler bricks' own voxels needs no new bricks; then an Add limit mid-stroke keeps the earlier change.
     const { ed: ed2 } = editor(64)
     ed2.beginStroke(add, { ...b3, radius: 1 }, { x: 0, z: 0 })
-    expect(ed2.dab3({ x: 0, y: 5, z: 0 }, 0.1, false)).toBe('ok')
+    expect(ed2.dab3({ x: 0, y: 0.5, z: 0 }, 0.1, false)).toBe('ok')
     const n = ed2.layers.volume.count
     for (let i = 0; i < 8000 - n - 1; i++) ed2.layers.volume.put(brickKey(-2000 + (i % 100), -100 + Math.floor(i / 100), -2000), { a: filler.a.slice(), k: filler.k.slice() })
-    expect(ed2.dab3({ x: 20, y: 5, z: 20 }, 0.1, false)).toBe('limit')
+    expect(ed2.dab3({ x: 20, y: 0.5, z: 20 }, 0.1, false)).toBe('limit')
     ed2.endStroke()
     expect(ed2.canUndo).toBe(true)
     ed2.undo()

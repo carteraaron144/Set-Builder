@@ -29,9 +29,9 @@ interface Change {
  * Applies one 3D dab and returns the keys of the bricks it changed, or 'limit' (changing nothing) when it would
  * need more bricks than a scene may hold.
  *
- * Add and Carve raise A or K toward a sphere's signed distance (radius·falloff weight − distance) by at most
- * the raise rate·strength·dt per dab once the value is positive; a value still below zero jumps straight to a small
- * positive one, so a first dab leaves a thin blob. Smooth 3D moves the combined density by at most the same
+ * Add raises A and Carve raises K so the combined density there moves by at most the raise rate·strength·dt
+ * per dab: up for Add (capped at a sphere's signed distance, radius·falloff weight − distance), down for Carve
+ * (only in solid, floored at the negated sphere). Smooth 3D moves the combined density by at most the same
  * amount toward its 3×3×3 box blur, raising A where the blur is higher and K where it is lower.
  */
 export function sculpt3d(
@@ -76,9 +76,17 @@ export function sculpt3d(
         if (w === 0) continue
         const step = RAISE_RATE * b.strength * w * dab.dt
         if (target) {
+          // Move the combined density by one step instead of jumping to the sphere, so the surface bubbles out gradually.
           const t = Math.min(VALUE_LIMIT, radius * w - d)
-          const current = read(vi, vk, vj, target) * VOXEL_STEP
-          propose(vi, vk, vj, target, units(Math.min(t, Math.max(current, 0) + step)))
+          const s0 = density(x, y, z)
+          if (target === 'a') {
+            const next = Math.min(t, s0 + step)
+            if (next > s0) propose(vi, vk, vj, 'a', units(next))
+          } else if (s0 > 0) {
+            // Air needs no carving, and a positive K there would block later Add.
+            const next = Math.max(s0 - step, -t)
+            if (next < s0) propose(vi, vk, vj, 'k', units(-next))
+          }
         } else {
           let blur = 0
           for (let dz = -1; dz <= 1; dz++)

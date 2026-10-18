@@ -24,9 +24,27 @@ describe('sculpt3d', () => {
     expect(is3dMode('raise')).toBe(false)
   })
 
-  it('Add makes the centre solid and leaves distant bricks absent', () => {
+  it('a first Add dab only nudges the surface; it takes a few to make a blob', () => {
     const v = new VolumeLayer(SIZE)
-    expect(run(v, 'add', brush(2), dab(0, 5, 0))).not.toBe('limit')
+    run(v, 'add', brush(2), dab(0, 5, 0))
+    const o = { a: 0, k: 0 }
+    v.sample(0, 5, 0, o)
+    expect(o.a).toBeLessThan(0)
+  })
+
+  it('Add grows the surface from the ground by about the raise rate, not a radius at once', () => {
+    const v = new VolumeLayer(SIZE)
+    const dt = 1 / 60
+    for (let n = 0; n < 60; n++) run(v, 'add', brush(4, 1), { ...dab(0, 0, 0), dt })
+    const d = densityOf(v)
+    // After one second at strength 1 the surface above the centre is roughly RAISE_RATE metres up, well short of the 4 m radius.
+    expect(d(0, 0.5, 0)).toBeGreaterThan(0)
+    expect(d(0, 3.5, 0)).toBeLessThan(0)
+  })
+
+  it('Add makes the centre solid after repeated dabs and leaves distant bricks absent', () => {
+    const v = new VolumeLayer(SIZE)
+    for (let n = 0; n < 5; n++) expect(run(v, 'add', brush(2), dab(0, 5, 0))).not.toBe('limit')
     const o = { a: 0, k: 0 }
     v.sample(0, 5, 0, o)
     expect(o.a).toBeGreaterThan(0)
@@ -44,7 +62,8 @@ describe('sculpt3d', () => {
 
   it('Carve touches only K', () => {
     const v = new VolumeLayer(SIZE)
-    run(v, 'carve', brush(2), dab(0, 5, 0))
+    run(v, 'carve', brush(2), dab(0, -1, 0))
+    expect([...v.keys()].length).toBeGreaterThan(0)
     for (const key of v.keys()) {
       expect(v.get(key)!.a.every((x) => x === -64)).toBe(true)
       expect(v.get(key)!.k.some((x) => x !== -64)).toBe(true)
@@ -54,8 +73,9 @@ describe('sculpt3d', () => {
   it('Alt-Add equals Carve and Alt-Carve equals Add', () => {
     const a = new VolumeLayer(SIZE)
     const b = new VolumeLayer(SIZE)
-    run(a, 'add', brush(3), dab(1, 4, 2, true))
-    run(b, 'carve', brush(3), dab(1, 4, 2, false))
+    run(a, 'add', brush(3), dab(1, -1, 2, true))
+    run(b, 'carve', brush(3), dab(1, -1, 2, false))
+    expect([...b.keys()].length).toBeGreaterThan(0)
     expect([...a.keys()]).toEqual([...b.keys()])
     for (const k of a.keys()) {
       expect(a.get(k)!.a).toEqual(b.get(k)!.a)
@@ -80,6 +100,17 @@ describe('sculpt3d', () => {
     for (const k of v.keys()) for (let i = 0; i < 512; i++) biggest = Math.max(biggest, (v.get(k)!.a[i] - (before.get(k)?.[i] ?? -64)) / 32)
     expect(biggest).toBeLessThanOrEqual(RAISE_RATE * dt + 1 / 32)
     expect(biggest).toBeGreaterThan(0)
+  })
+
+  it('Carve gradually lowers solid ground and leaves air alone', () => {
+    const v = new VolumeLayer(SIZE)
+    run(v, 'carve', brush(3), dab(0, 5, 0))
+    expect([...v.keys()]).toEqual([])
+    const dt = 1 / 60
+    for (let n = 0; n < 30; n++) run(v, 'carve', brush(3, 1), { ...dab(0, 0, 0), dt })
+    const d = densityOf(v)
+    expect(d(0, -0.5, 0)).toBeLessThanOrEqual(0)
+    expect(d(0, -3, 0)).toBeGreaterThan(0)
   })
 
   it('Smooth 3D lowers a one-voxel spike', () => {
@@ -112,7 +143,8 @@ describe('sculpt3d', () => {
   it('creates nothing above the height limit or below the floor', () => {
     for (const y of [MAX_HEIGHT, MIN_HEIGHT]) {
       const v = new VolumeLayer(SIZE)
-      run(v, 'add', brush(6), dab(0, y, 0))
+      // Density 0 everywhere: the dab is on the surface, wherever it is.
+      sculpt3d(v, 'add', brush(6), dab(0, y, 0), () => 0, () => {})
       expect(v.count).toBeGreaterThan(0)
       for (const key of v.keys()) {
         const [, by] = unpackKey(key)
