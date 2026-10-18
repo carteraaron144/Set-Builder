@@ -1,11 +1,11 @@
-import { buildChunkGeometry, type ChunkGeometry } from '../terrain/chunks'
+import { buildChunkGeometry, CHUNK_VERTS, chunkCount, type ChunkGeometry } from '../terrain/chunks'
 import { BIOME_SPACING, clipRect, HEIGHT_SPACING, heightAt, type Rect, type TerrainLayers } from '../terrain/layers'
 import { DEFAULT_PALETTE, type TerrainPalette } from '../terrain/palette'
 import { raycastTerrain, type Vec3 } from '../terrain/pick'
 import { buildCaveChunk } from './caveChunk'
 import { caveGlowChunk } from './caveGlow'
 import { cavesReaching, profileCave, smoothMin, type CaveProfile } from './caves'
-import { carveRect, exclusionRect, profileSpline, type SplineProfile, type SurfaceMap } from './carve'
+import { carveRect, exclusionRect, profileSpline, SURFACE, type SplineProfile, type SurfaceMap } from './carve'
 import { FEATURES, type Cave, type Features, type Spline } from './features'
 import { floodPond, type PondFill } from './ponds'
 
@@ -31,6 +31,9 @@ function sameFill(a: PondFill, b: PondFill): boolean {
   return true
 }
 
+/** A path's corridor is air from its surface up to this height (metres). */
+const PATH_CLEARANCE = 4
+
 /**
  * The terrain as shown: the sculpted layers with paths and rivers carved in, surface colours, flooded ponds,
  * caves hollowed out, and where scatter is cleared. Derived from the layers and features, never saved.
@@ -50,17 +53,24 @@ export class Ground {
   private readonly pondClear: Uint8Array
   private readonly caveClear: Uint8Array
   private combined: Uint8Array | null = null
+  /** Per chunk: 1 where its sample square meets a brick footprint. */
+  private readonly volumeChunks: Uint8Array
+  private volumeFootprints: Rect[] = []
+  private readonly volumeAB = { a: 0, k: 0 }
 
   constructor(base: TerrainLayers, features: Features) {
     this.base = base
     const h = base.heights
-    this.layers = { heights: { ...h, data: h.data.slice() }, biomes: base.biomes }
+    this.layers = { heights: { ...h, data: h.data.slice() }, biomes: base.biomes, volume: base.volume }
     const n = h.resolution * h.resolution
     this.surface = { kind: new Uint8Array(n), weight: new Uint8Array(n) }
     const b = base.biomes.resolution
     this.splineClear = new Uint8Array(b * b)
     this.pondClear = new Uint8Array(b * b)
     this.caveClear = new Uint8Array(b * b)
+    const chunks = chunkCount(h.size)
+    this.volumeChunks = new Uint8Array(chunks * chunks)
+    this.refreshVolume()
     this.rebuild(features, null)
   }
 
@@ -149,20 +159,58 @@ export class Ground {
     return d
   }
 
-  /** Solid density at a world point: positive inside the ground, negative in air or a cave; the two blend where a cave breaks the surface. */
-  density(x: number, y: number, z: number): number {
-    return smoothMin(heightAt(this.layers.heights, x, z) - y, this.caveDistance(x, y, z), FEATURES.cave.groundBlend)
+  /**
+   * Solid density at a world point: positive inside the ground, negative in air or a cave; the two blend where a cave breaks the surface.
+   * Sculpted bricks add material (A) and remove it (K), and a path's corridor is air from its surface up to 4 m. `ignoreCaves` drops only the cave term.
+   */
+  density(x: number, y: number, z: number, ignoreCaves = false): number {
+    const h = heightAt(this.layers.heights, x, z)
+    const cave = ignoreCaves ? Infinity : this.caveDistance(x, y, z)
+    const volume = this.layers.volume
+    if (volume.count === 0) return smoothMin(h - y, cave, FEATURES.cave.groundBlend)
+    const ab = this.volumeAB
+    volume.sample(x, y, z, ab)
+    let s = Math.min(Math.max(h - y, ab.a), -ab.k)
+    const { resolution, size } = this.layers.heights
+    const i = Math.min(resolution - 1, Math.max(0, Math.round((x + size / 2) / HEIGHT_SPACING)))
+    const j = Math.min(resolution - 1, Math.max(0, Math.round((z + size / 2) / HEIGHT_SPACING)))
+    if (this.surface.kind[j * resolution + i] !== SURFACE.none) s = Math.min(s, -Math.min(y - h, h + PATH_CLEARANCE - y))
+    return smoothMin(s, cave, FEATURES.cave.groundBlend)
   }
 
   /** Where a ray first meets the ground as shown, caves included unless `ignoreCaves`, or null. */
   raycast(origin: Vec3, dir: Vec3, ignoreCaves = false): Vec3 | null {
-    const density = this.caves.length > 0 && !ignoreCaves ? (x: number, y: number, z: number) => this.density(x, y, z) : undefined
+    const useDensity = this.layers.volume.count > 0 || (this.caves.length > 0 && !ignoreCaves)
+    const density = useDensity ? (x: number, y: number, z: number) => this.density(x, y, z, ignoreCaves) : undefined
     return raycastTerrain(this.layers.heights, origin, dir, 2000, density)
   }
 
-  /** Whether chunk `chunk` is meshed from the density field: its sample square meets a cave footprint. */
+  /** Whether chunk `chunk` is meshed from the density field: its sample square meets a cave or brick footprint. */
   isSdfChunk(chunk: number): boolean {
-    return this.cavesOf(chunk).length > 0
+    return this.cavesOf(chunk).length > 0 || this.hasVolume(chunk)
+  }
+
+  /** Whether chunk `chunk`'s sample square meets a brick footprint. */
+  hasVolume(chunk: number): boolean {
+    return this.volumeChunks[chunk] === 1
+  }
+
+  /** Recomputes the brick footprints and per-chunk flags; returns the old and new footprints so the caller can dirty their chunks. */
+  refreshVolume(): Rect[] {
+    const old = this.volumeFootprints
+    const fresh = this.layers.volume.footprints()
+    this.volumeFootprints = fresh
+    const n = chunkCount(this.layers.heights.size)
+    const cells = CHUNK_VERTS - 1
+    this.volumeChunks.fill(0)
+    for (const f of fresh) {
+      const cx0 = Math.max(0, Math.ceil(f.x0 / cells) - 1)
+      const cx1 = Math.min(n - 1, Math.floor(f.x1 / cells))
+      const cz0 = Math.max(0, Math.ceil(f.z0 / cells) - 1)
+      const cz1 = Math.min(n - 1, Math.floor(f.z1 / cells))
+      for (let cz = cz0; cz <= cz1; cz++) for (let cx = cx0; cx <= cx1; cx++) this.volumeChunks[cz * n + cx] = 1
+    }
+    return [...old, ...fresh]
   }
 
   /** The chunk's mesh: the heightmap grid, or the density field's surface where caves reach it (unless `ignoreCaves`). */

@@ -1,7 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { createFlatLayers, type TerrainLayers } from '../terrain/layers'
+import { createFlatLayers, heightAt, type TerrainLayers } from '../terrain/layers'
 import { emptyFeatures, type Features, type Pond, type Spline } from './features'
 import { Ground } from './ground'
+import { brickKey, type Brick } from '../terrain/volume'
+import { smoothMin } from './caves'
+import { FEATURES } from './features'
+import { SURFACE } from './carve'
 
 const SIZE = 64
 const RES = SIZE * 2 + 1
@@ -114,3 +118,96 @@ describe('Ground', () => {
     expect(g.rebuild(with_([], [pond(1.8)]), null)).toEqual([])
   })
 })
+
+/** A brick with every voxel's A (or K) set to `v` Int8 units. */
+function filledBrick(channel: 'a' | 'k', v: number): Brick {
+  const b: Brick = { a: new Int8Array(512).fill(-64), k: new Int8Array(512).fill(-64) }
+  b[channel].fill(v)
+  return b
+}
+
+describe('Ground volume density', () => {
+  it('equals the heightmap and cave field exactly with no bricks', () => {
+    const g = new Ground(sloped(), emptyFeatures())
+    let seed = 12345
+    const rnd = () => ((seed = (seed * 1664525 + 1013904223) >>> 0) / 2 ** 32)
+    for (let n = 0; n < 50; n++) {
+      const x = (rnd() - 0.5) * 60
+      const y = (rnd() - 0.5) * 20
+      const z = (rnd() - 0.5) * 60
+      const expected = smoothMin(g.layers.heights.data.length ? heightAtRef(g, x, z) - y : 0, g.caveDistance(x, y, z), FEATURES.cave.groundBlend)
+      expect(g.density(x, y, z)).toBe(expected)
+    }
+  })
+
+  it('shares the volume layer with the base layers', () => {
+    const base = createFlatLayers(SIZE)
+    expect(new Ground(base, emptyFeatures()).layers.volume).toBe(base.volume)
+  })
+
+  it('makes a point above flat ground solid where Add reaches', () => {
+    const base = createFlatLayers(SIZE)
+    const b = filledBrick('a', 32)
+    base.volume.put(brickKey(8, 0, 8), b)
+    const g = new Ground(base, emptyFeatures())
+    expect(g.density(0.5, 2, 0.5)).toBeGreaterThan(0)
+  })
+
+  it('makes a point below ground air where Carve reaches', () => {
+    const base = createFlatLayers(SIZE)
+    base.volume.put(brickKey(8, -1, 8), filledBrick('k', 32))
+    const g = new Ground(base, emptyFeatures())
+    expect(g.density(0.5, -1.5, 0.5)).toBeLessThan(0)
+  })
+
+  it('clears a corridor above a path inside an Add brick, but not above it', () => {
+    const base = createFlatLayers(SIZE)
+    const g0 = new Ground(base, with_([path()]))
+    let idx = -1
+    for (let n = 0; n < g0.surface.kind.length && idx < 0; n++) if (g0.surface.kind[n] !== SURFACE.none && g0.surface.weight[n] === 255) idx = n
+    expect(idx).toBeGreaterThanOrEqual(0)
+    const x = -SIZE / 2 + (idx % RES) * 0.5
+    const z = -SIZE / 2 + Math.floor(idx / RES) * 0.5
+    const bx = Math.floor((idx % RES) / 8)
+    const bz = Math.floor(Math.floor(idx / RES) / 8)
+    for (let by = -1; by <= 1; by++) for (let dx = -1; dx <= 1; dx++) for (let dz = -1; dz <= 1; dz++) base.volume.put(brickKey(bx + dx, by, bz + dz), filledBrick('a', 32))
+    const g = new Ground(base, with_([path()]))
+    const h = g.layers.heights.data[idx]
+    expect(g.density(x, h + 2, z)).toBeLessThanOrEqual(0)
+    expect(g.density(x, h + 5, z)).toBeGreaterThan(0)
+  })
+
+  it('raycasts straight down onto an Add blob, not the ground', () => {
+    const base = createFlatLayers(SIZE)
+    for (let by = 0; by <= 1; by++) for (let dx = -1; dx <= 1; dx++) for (let dz = -1; dz <= 1; dz++) base.volume.put(brickKey(8 + dx, by, 8 + dz), filledBrick('a', 32))
+    const g = new Ground(base, emptyFeatures())
+    const hit = g.raycast({ x: 0.5, y: 20, z: 0.5 }, { x: 0, y: -1, z: 0 })!
+    expect(hit.y).toBeGreaterThan(7)
+  })
+
+  it('treats chunks meeting a brick footprint as SDF chunks', () => {
+    const base = createFlatLayers(128)
+    base.volume.put(brickKey(9, 0, 0), filledBrick('a', 0))
+    const g = new Ground(base, emptyFeatures())
+    // Footprint spans samples 68..83 in x; chunk 0 ends at 64 (2 m clear), chunk 1 begins at 64.
+    expect(g.isSdfChunk(0)).toBe(false)
+    expect(g.isSdfChunk(1)).toBe(true)
+    expect(g.isSdfChunk(2)).toBe(false)
+    expect(g.hasVolume(1)).toBe(true)
+  })
+
+  it('refreshVolume returns the old and new footprints after bricks change', () => {
+    const base = createFlatLayers(128)
+    const g = new Ground(base, emptyFeatures())
+    expect(g.refreshVolume()).toEqual([])
+    base.volume.put(brickKey(9, 0, 0), filledBrick('a', 0))
+    expect(g.refreshVolume()).toEqual([{ x0: 68, z0: -4, x1: 83, z1: 11 }])
+    base.volume.put(brickKey(9, 0, 0), null)
+    expect(g.refreshVolume()).toEqual([{ x0: 68, z0: -4, x1: 83, z1: 11 }])
+    expect(g.isSdfChunk(1)).toBe(false)
+  })
+})
+
+function heightAtRef(g: Ground, x: number, z: number): number {
+  return heightAt(g.layers.heights, x, z)
+}
