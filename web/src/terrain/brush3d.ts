@@ -1,4 +1,4 @@
-import { brushWeight, type BrushSettings, type TerrainMode } from './brush'
+import { brushWeight, RAISE_RATE, type BrushSettings, type TerrainMode } from './brush'
 import { HEIGHT_SPACING, MAX_HEIGHT, MIN_HEIGHT } from './layers'
 import { brickKey, BRICK, MAX_BRICKS, VALUE_LIMIT, VOXEL_STEP, type Brick, type VolumeLayer } from './volume'
 
@@ -14,8 +14,6 @@ export interface Dab3 {
   invert: boolean
 }
 
-/** How far strength 1 moves the surface per dab, in metres. */
-const STEP = 0.5
 const DEFAULT_UNITS = -VALUE_LIMIT / VOXEL_STEP
 const LIMIT_UNITS = VALUE_LIMIT / VOXEL_STEP
 const units = (metres: number) => Math.max(-LIMIT_UNITS, Math.min(LIMIT_UNITS, Math.round(metres / VOXEL_STEP)))
@@ -32,7 +30,7 @@ interface Change {
  * need more bricks than a scene may hold.
  *
  * Add and Carve raise A or K toward a sphere's signed distance (radius·falloff weight − distance) by at most
- * half a metre·strength per dab once the value is positive; a value still below zero jumps straight to a small
+ * the raise rate·strength·dt per dab once the value is positive; a value still below zero jumps straight to a small
  * positive one, so a first dab leaves a thin blob. Smooth 3D moves the combined density by at most the same
  * amount toward its 3×3×3 box blur, raising A where the blur is higher and K where it is lower.
  */
@@ -76,7 +74,7 @@ export function sculpt3d(
         const d = Math.hypot(x - dab.x, y - dab.y, z - dab.z)
         const w = brushWeight(d, brush)
         if (w === 0) continue
-        const step = STEP * b.strength * w
+        const step = RAISE_RATE * b.strength * w * dab.dt
         if (target) {
           const t = Math.min(VALUE_LIMIT, radius * w - d)
           const current = read(vi, vk, vj, target) * VOXEL_STEP

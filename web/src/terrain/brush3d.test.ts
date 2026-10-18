@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { sculpt3d, is3dMode, RADIUS_3D_MAX, type Dab3 } from './brush3d'
-import { BRUSH_DEFAULTS, type BrushSettings } from './brush'
+import { BRUSH_DEFAULTS, RAISE_RATE, type BrushSettings } from './brush'
 import { MAX_HEIGHT, MIN_HEIGHT } from './layers'
 import { brickKey, MAX_BRICKS, unpackKey, VALUE_LIMIT, VolumeLayer, type Brick } from './volume'
 
@@ -71,14 +71,14 @@ describe('sculpt3d', () => {
     expect(o.a).toBe(VALUE_LIMIT)
   })
 
-  it('moves the surface by at most half a metre per dab once there is one', () => {
+  it.each([0.1, 1 / 60])('moves the surface by at most the raise rate × dt per dab once there is one (dt %f)', (dt) => {
     const v = new VolumeLayer(SIZE)
     run(v, 'add', brush(4), dab(0, 5, 0))
     const before = new Map([...v.keys()].map((k) => [k, v.get(k)!.a.slice()]))
-    run(v, 'add', brush(4), dab(0, 5, 0))
+    run(v, 'add', brush(4), { ...dab(0, 5, 0), dt })
     let biggest = 0
     for (const k of v.keys()) for (let i = 0; i < 512; i++) biggest = Math.max(biggest, (v.get(k)!.a[i] - (before.get(k)?.[i] ?? -64)) / 32)
-    expect(biggest).toBeLessThanOrEqual(0.5 + 1 / 32)
+    expect(biggest).toBeLessThanOrEqual(RAISE_RATE * dt + 1 / 32)
     expect(biggest).toBeGreaterThan(0)
   })
 

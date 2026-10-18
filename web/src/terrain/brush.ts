@@ -28,7 +28,7 @@ export const BRUSH_RADIUS_MIN = 1
 export const BRUSH_RADIUS_MAX = 50
 
 // Rates at strength 1 (tune after playtesting).
-const RAISE_RATE = 8 // m/s
+export const RAISE_RATE = 8 // m/s
 const NOISE_RATE = 4 // m/s
 const BLEND_RATE = 4 // 1/s for smooth, flatten and paint
 
