@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { sculpt3d, is3dMode, RADIUS_3D_MAX, type Dab3 } from './brush3d'
 import { BRUSH_DEFAULTS, RAISE_RATE, type BrushSettings } from './brush'
 import { MAX_HEIGHT, MIN_HEIGHT } from './layers'
@@ -18,7 +18,15 @@ const densityOf = (v: VolumeLayer) => (x: number, y: number, z: number) => {
 const run = (v: VolumeLayer, mode: 'add' | 'carve' | 'smooth3d', b: BrushSettings, d: Dab3, touched = new Set<number>()) =>
   sculpt3d(v, mode, b, d, densityOf(v), (k) => touched.add(k))
 
+/** A repeatable stand-in for Math.random, so two runs that should match do. */
+const seeded = () => {
+  let x = 12345
+  vi.spyOn(Math, 'random').mockImplementation(() => ((x = (x * 1103515245 + 12345) % 2147483648) / 2147483648))
+}
+
 describe('sculpt3d', () => {
+  afterEach(() => vi.restoreAllMocks())
+
   it('recognises the 3D modes', () => {
     expect(['add', 'carve', 'smooth3d'].every((m) => is3dMode(m as never))).toBe(true)
     expect(is3dMode('raise')).toBe(false)
@@ -73,7 +81,9 @@ describe('sculpt3d', () => {
   it('Alt-Add equals Carve and Alt-Carve equals Add', () => {
     const a = new VolumeLayer(SIZE)
     const b = new VolumeLayer(SIZE)
+    seeded()
     run(a, 'add', brush(3), dab(1, -1, 2, true))
+    seeded()
     run(b, 'carve', brush(3), dab(1, -1, 2, false))
     expect([...b.keys()].length).toBeGreaterThan(0)
     expect([...a.keys()]).toEqual([...b.keys()])
@@ -100,6 +110,14 @@ describe('sculpt3d', () => {
     for (const k of v.keys()) for (let i = 0; i < 512; i++) biggest = Math.max(biggest, (v.get(k)!.a[i] - (before.get(k)?.[i] ?? -64)) / 32)
     expect(biggest).toBeLessThanOrEqual(RAISE_RATE * dt + 1 / 32)
     expect(biggest).toBeGreaterThan(0)
+  })
+
+  it('Add still grows at low strength, where one dab moves less than a voxel step', () => {
+    const v = new VolumeLayer(SIZE)
+    for (let n = 0; n < 120; n++) run(v, 'add', brush(2, 0.05), { ...dab(0, 0, 0), dt: 1 / 60 })
+    // 0.05 × 8 m/s × 2 s = 0.8 m expected at the centre; the dithering is random, so allow a wide margin.
+    expect(densityOf(v)(0, 0, 0)).toBeGreaterThan(0.4)
+    expect(densityOf(v)(0, 0, 0)).toBeLessThan(1.2)
   })
 
   it('Add refills space that Carve removed', () => {

@@ -16,7 +16,11 @@ export interface Dab3 {
 
 const DEFAULT_UNITS = -VALUE_LIMIT / VOXEL_STEP
 const LIMIT_UNITS = VALUE_LIMIT / VOXEL_STEP
-const units = (metres: number) => Math.max(-LIMIT_UNITS, Math.min(LIMIT_UNITS, Math.round(metres / VOXEL_STEP)))
+/**
+ * Metres to voxel units, rounded up or down at random in proportion to the remainder, so a step smaller than one
+ * unit still lands on average instead of rounding away every frame at low strength.
+ */
+const units = (metres: number) => Math.max(-LIMIT_UNITS, Math.min(LIMIT_UNITS, Math.floor(metres / VOXEL_STEP + Math.random())))
 
 interface Change {
   key: number
@@ -68,6 +72,12 @@ export function sculpt3d(
     changes.push({ key: brickKey(vi >> 3, vk >> 3, vj >> 3), index: ((vk & 7) * BRICK + (vj & 7)) * BRICK + (vi & 7), channel, value, lower })
   }
 
+  // Rounding up at random must not push a smoothed value onto the limit, which would block later edits.
+  const smoothPropose = (vi: number, vk: number, vj: number, channel: 'a' | 'k', value: number) => {
+    const u = units(value)
+    if (Math.abs(u) < LIMIT_UNITS) propose(vi, vk, vj, channel, u)
+  }
+
   for (let vk = k0; vk <= k1; vk++)
     for (let vj = j0; vj <= j1; vj++)
       for (let vi = i0; vi <= i1; vi++) {
@@ -106,10 +116,10 @@ export function sculpt3d(
           // Only near the surface: A and K beyond ±2 m would be invisible now and block later edits.
           if (blur > s0) {
             const next = Math.min(blur, s0 + step)
-            if (Math.abs(s0) < VALUE_LIMIT && Math.abs(next) < VALUE_LIMIT) propose(vi, vk, vj, 'a', units(next))
+            if (Math.abs(s0) < VALUE_LIMIT && Math.abs(next) < VALUE_LIMIT) smoothPropose(vi, vk, vj, 'a', next)
           } else if (blur < s0) {
             const next = Math.max(blur, s0 - step)
-            if (Math.abs(s0) < VALUE_LIMIT && Math.abs(next) < VALUE_LIMIT) propose(vi, vk, vj, 'k', units(-next))
+            if (Math.abs(s0) < VALUE_LIMIT && Math.abs(next) < VALUE_LIMIT) smoothPropose(vi, vk, vj, 'k', -next)
           }
         }
       }
