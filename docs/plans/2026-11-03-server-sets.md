@@ -41,8 +41,10 @@ cookie. The server replaces browser storage. The owner model is the skeleton tha
 - `ServerUnavailableError` replaces `StorageUnavailableError` for network failures and 5xx responses, with a
   user-facing message. 4xx responses throw with the server's message.
 - `editor/browserDeps.ts` opens `HttpSceneStore` instead of `openSceneStore`.
-- One-time import: on start, if browser storage still holds sets, upload each one with PUT, then delete the IndexedDB
-  database. If an upload fails, browser storage is kept so the import retries next start.
+- One-time import: on start, if browser storage still holds sets, upload each one with PUT (oldest first) and remove
+  it from browser storage as soon as its upload succeeds. A failed or damaged set stays and is retried next start; a
+  retry never re-uploads a set already on the server. The empty IndexedDB database is left in place (deleting it
+  would block on the open connection).
   `sceneStore.ts` stays only for this import.
 
 ## Tests (test-first)

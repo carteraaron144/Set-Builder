@@ -54,7 +54,7 @@ export function TopBar({ onNew, onOpen, onSave, onDownload, onUpload, onExport }
       <button type="button" onClick={onOpen}>
         Open
       </button>
-      <button type="button" onClick={onSave} title="Save in this browser (Ctrl/Cmd+S)">
+      <button type="button" onClick={onSave} title="Save to the server (Ctrl/Cmd+S)">
         Save
       </button>
       <button type="button" onClick={onDownload} title="Download a .setbuilder project file">

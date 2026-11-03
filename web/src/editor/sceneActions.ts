@@ -1,4 +1,5 @@
 import type { StoreApi } from 'zustand'
+import { ServerRejectedError } from '../persistence/httpSceneStore'
 import type { SceneStore } from '../persistence/sceneStore'
 import { createScene, type MapMode, type SceneSize } from '../scene/scene'
 import { readSceneFile, SCENE_FILE_EXTENSION, SceneFileError, writeSceneFile } from '../scene/sceneFile'
@@ -14,7 +15,7 @@ import type { EditorState } from './editorStore'
 
 export interface ActionDeps {
   store: StoreApi<EditorState>
-  /** Lazily opened; may reject with StorageUnavailableError. */
+  /** Lazily opened. Its calls may reject with ServerUnavailableError or ServerRejectedError. */
   sceneStore: () => Promise<SceneStore>
   /** Asks before discarding unsaved changes (window.confirm in the app). */
   confirmDiscard: () => boolean
@@ -23,8 +24,8 @@ export interface ActionDeps {
 
 export const MESSAGES = {
   saved: 'Saved',
-  storageFailed: "Couldn't save in this browser (storage is blocked or full). Use Download to keep a copy.",
-  openFailed: "Couldn't open that scene from this browser's storage.",
+  storageFailed: "Couldn't reach the server to save. Use Download to keep a copy.",
+  openFailed: "Couldn't open that scene from the server.",
   notFound: "That saved scene couldn't be found.",
   notAScene: "That file isn't a Set Builder scene.",
   newerVersion: 'That scene was made with a newer version of Set Builder.',
@@ -52,8 +53,9 @@ export async function saveCurrent(deps: ActionDeps): Promise<void> {
   try {
     const sceneStore = await deps.sceneStore()
     await sceneStore.save(scene, layers)
-  } catch {
-    deps.store.getState().setMessage({ kind: 'error', text: MESSAGES.storageFailed })
+  } catch (e) {
+    const text = e instanceof ServerRejectedError ? `Couldn't save: ${e.message}` : MESSAGES.storageFailed
+    deps.store.getState().setMessage({ kind: 'error', text })
     return
   }
   const state = deps.store.getState()
@@ -157,7 +159,7 @@ export function downloadCurrent(deps: ActionDeps): void {
   deps.download(sceneFilename(scene.name), writeSceneFile(scene, terrain.layers))
 }
 
-/** On startup: shows the newest saved scene, else keeps the new one. Storage problems are left for Save to report. */
+/** On startup: shows the newest saved scene, else keeps the new one. Server problems are left for Save to report. */
 export async function loadInitialScene(deps: ActionDeps): Promise<void> {
   try {
     const sceneStore = await deps.sceneStore()
@@ -167,6 +169,6 @@ export async function loadInitialScene(deps: ActionDeps): Promise<void> {
     // Don't replace a scene the user has already started editing.
     if (contents && !deps.store.getState().dirty) deps.store.getState().replaceScene(contents.scene, contents.layers)
   } catch {
-    // Storage unavailable: start with the new scene.
+    // Server unreachable: start with the new scene.
   }
 }

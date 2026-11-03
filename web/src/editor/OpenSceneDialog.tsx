@@ -33,7 +33,7 @@ export function OpenSceneDialog({
         <h2 id="open-scene-title">Open scene</h2>
         {list.status === 'loading' && <p className="muted">Loading…</p>}
         {list.status === 'error' && (
-          <p className="muted">Browser storage is unavailable here, so there are no saved scenes. Use Upload to open a project file.</p>
+          <p className="muted">Couldn't reach the server to list saved scenes. Use Upload to open a project file.</p>
         )}
         {list.status === 'ready' && list.scenes.length === 0 && <p className="muted">No saved scenes yet.</p>}
         {list.status === 'ready' && list.scenes.length > 0 && (

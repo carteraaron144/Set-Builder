@@ -67,11 +67,11 @@ describe('App', () => {
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   })
 
-  it('shows a storage problem in the Open dialog', async () => {
+  it('shows a server problem in the Open dialog', async () => {
     render(<App />)
     await userEvent.click(screen.getByRole('button', { name: 'Open' }))
     expect(screen.getByRole('dialog', { name: 'Open scene' })).toBeInTheDocument()
-    expect(await screen.findByText(/storage is unavailable/i)).toBeInTheDocument()
+    expect(await screen.findByText(/couldn't reach the server/i)).toBeInTheDocument()
   })
 
   it('keeps the editor and its unsaved-changes guard when the renderer fails', () => {
