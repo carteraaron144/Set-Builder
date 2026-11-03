@@ -12,6 +12,10 @@ spring:
     url: ${SETBUILDER_DB_URL:jdbc:postgresql://localhost:5432/setbuilder}
     username: ${SETBUILDER_DB_USER:${USER}}
     password: ${SETBUILDER_DB_PASSWORD:}
+  mvc:
+    # Errors come back as RFC 9457 problem JSON, so the web app can show the server's reason.
+    problemdetails:
+      enabled: true
   jpa:
     hibernate:
       ddl-auto: validate

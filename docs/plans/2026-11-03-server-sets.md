@@ -13,7 +13,7 @@ cookie. The server replaces browser storage. The owner model is the skeleton tha
   `ddl-auto: validate` (Flyway owns the schema); multipart limit 64 MB.
 - Flyway `V1__users_and_sets.sql`:
   - `users (id uuid pk, created_at timestamptz)`. Later accounts add columns (email, password hash) here.
-  - `sets (id uuid pk, owner_id uuid fk users not null, name text, width int, depth int, updated_at timestamptz, file bytea)`,
+  - `sets (id uuid pk, owner_id uuid fk users not null, name text, size int (64/128/256), updated_at timestamptz, file bytea)`,
     index on `(owner_id, updated_at desc)`.
 - `file` is the existing `.setbuilder` zip from `writeSceneFile`, stored as-is. The server never parses it.
 
@@ -26,7 +26,7 @@ cookie. The server replaces browser storage. The owner model is the skeleton tha
 - `SetEntity`, `SetRepository` (`findByOwnerIdOrderByUpdatedAtDesc` returning a summary projection without the
   file bytes, `findByIdAndOwnerId`).
 - `SetController` under `/api/sets`:
-  - `GET /api/sets` lists `[{id, name, size:{width,depth}, updatedAt}]`, newest first.
+  - `GET /api/sets` lists `[{id, name, size, updatedAt}]`, newest first.
   - `GET /api/sets/{id}` returns the zip (`application/octet-stream`).
   - `PUT /api/sets/{id}` takes multipart `meta` (JSON `{name, size}`) and `file`; creates or replaces the set and sets
     `updatedAt` on the server.
