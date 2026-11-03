@@ -21,7 +21,7 @@
       "runtimeExecutable": "bash",
       "runtimeArgs": [
         "-c",
-        "cd server && JAVA_HOME=/opt/homebrew/opt/openjdk@21 ./gradlew bootRun -PskipWeb -q"
+        "cd server && JAVA_HOME=/opt/homebrew/opt/openjdk@25 ./gradlew bootRun -PskipWeb -q"
       ],
       "port": 8080
     }
