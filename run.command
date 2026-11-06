@@ -4,7 +4,7 @@
 # Double-click in Finder, or run ./run.command. Close the window or press Ctrl+C to stop both.
 
 ROOT="${0:A:h}"
-export JAVA_HOME="${JAVA_HOME:-/opt/homebrew/opt/openjdk@21}"
+export JAVA_HOME="${JAVA_HOME:-/opt/homebrew/opt/openjdk@25}"
 API="http://localhost:8080"
 URL="http://localhost:5173"
 PIDS=()

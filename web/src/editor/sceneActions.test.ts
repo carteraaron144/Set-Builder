@@ -2,6 +2,7 @@ import 'fake-indexeddb/auto'
 import { strToU8, zipSync } from 'fflate'
 import type { Mesh, Object3D } from 'three'
 import { describe, expect, it, vi } from 'vitest'
+import { ServerRejectedError } from '../persistence/httpSceneStore'
 import { openSceneStore, StorageUnavailableError, type SceneStore } from '../persistence/sceneStore'
 import { createScene, type Scene } from '../scene/scene'
 import { readSceneFile, SceneFileError, writeSceneFile } from '../scene/sceneFile'
@@ -55,7 +56,7 @@ describe('saveCurrent', () => {
     await saveCurrent(deps)
     expect(store.getState().message).toEqual({ kind: 'error', text: MESSAGES.storageFailed })
     expect(MESSAGES.storageFailed).toBe(
-      "Couldn't save in this browser (storage is blocked or full). Use Download to keep a copy.",
+      "Couldn't reach the server to save. Use Download to keep a copy.",
     )
     expect(store.getState().dirty).toBe(true)
 
@@ -78,6 +79,20 @@ describe('saveCurrent', () => {
     store.getState().rename('X')
     await saveCurrent(deps)
     expect(store.getState().message).toEqual({ kind: 'error', text: MESSAGES.storageFailed })
+    expect(store.getState().dirty).toBe(true)
+  })
+
+  it("shows the server's reason when it refuses the save", async () => {
+    const { store, deps } = setup()
+    deps.sceneStore = async () => ({
+      save: () => Promise.reject(new ServerRejectedError(400, 'Name must be 1 to 200 characters')),
+      load: async () => undefined,
+      list: async () => [],
+      remove: async () => {},
+    })
+    store.getState().rename('X')
+    await saveCurrent(deps)
+    expect(store.getState().message).toEqual({ kind: 'error', text: "Couldn't save: Name must be 1 to 200 characters" })
     expect(store.getState().dirty).toBe(true)
   })
 })

@@ -45,7 +45,7 @@ export interface EditorState {
   terrain: TerrainEditor
   /** Increments on every terrain change (stroke, undo, redo). */
   editVersion: number
-  /** True when the scene has changes that are not in browser storage. */
+  /** True when the scene has changes that are not saved on the server. */
   dirty: boolean
   renderBackend: RenderBackend | null
   message: Message

@@ -5,8 +5,12 @@ Editing, rendering and saving happen in the browser; the server serves the app a
 
 ## Requirements
 
-- JDK 21: `brew install --cask temurin@21`, or `brew install openjdk@21` and `export JAVA_HOME=/opt/homebrew/opt/openjdk@21`
+- JDK 25: `brew install --cask temurin@25`, or `brew install openjdk@25` and `export JAVA_HOME=/opt/homebrew/opt/openjdk@25`
 - Node 26 and npm
+- PostgreSQL (sets are saved there): `brew install postgresql@18 && brew services start postgresql@18`, then
+  `createdb setbuilder` (dev) and `createdb setbuilder_test` (tests). Flyway creates the tables on startup. Override
+  the connection with `SETBUILDER_DB_URL`, `SETBUILDER_DB_USER` and `SETBUILDER_DB_PASSWORD`
+  (and `SETBUILDER_TEST_DB_URL` for tests).
 
 ## Run the server
 
@@ -95,7 +99,7 @@ merged. Check an export in Blender (5.2 wires the terrain's vertex colours autom
 ## Test
 
 - `cd web && npm test`
-- `cd server && ./gradlew test` (builds the web app first; add `-PskipWeb` for server-only runs)
+- `cd server && ./gradlew test` (builds the web app first; add `-PskipWeb` for server-only runs; needs Postgres running)
 
 ## Production build
 

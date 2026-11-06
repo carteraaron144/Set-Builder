@@ -1,21 +1,22 @@
 import type { StoreApi } from 'zustand'
-import { openSceneStore, type SceneStore } from '../persistence/sceneStore'
+import { createHttpSceneStore } from '../persistence/httpSceneStore'
+import { importBrowserScenes } from '../persistence/importBrowserScenes'
+import type { SceneStore } from '../persistence/sceneStore'
 import type { EditorState } from './editorStore'
 import type { ActionDeps } from './sceneActions'
 
-/** ActionDeps backed by the real browser: IndexedDB, window.confirm and an <a download> click. */
+/** ActionDeps backed by the real browser: the server's /api/sets, window.confirm and an <a download> click. */
 export function browserDeps(store: StoreApi<EditorState>): ActionDeps {
-  let opening: Promise<SceneStore> | null = null
+  let opening: Promise<SceneStore> | undefined
   return {
     store,
     sceneStore: () => {
-      if (!opening) {
-        opening = openSceneStore()
-        // Retry on the next call rather than caching a failure (storage may be unblocked later).
-        opening.catch(() => {
-          opening = null
-        })
-      }
+      // The first use moves any scenes saved in this browser's storage up to the server.
+      opening ??= (async () => {
+        const remote = createHttpSceneStore()
+        await importBrowserScenes(remote)
+        return remote
+      })()
       return opening
     },
     confirmDiscard: () =>

@@ -23,7 +23,7 @@ The design doc is a Claude Doc and the source of truth for design: https://claud
 - **Write risks as unit tests when they come up.** A plan's Review Focus item, a bug found in review or playtesting, or an edge case you notice becomes a unit test in the same commit as the code it covers, not a note for later. Only things a unit test truly can't reach (look and feel, frame rate, Blender import) stay as manual checks, and the report says so.
 - **Where tests live:**
   - **Web:** Vitest, next to the code as `*.test.ts(x)` (jsdom; `fake-indexeddb` for storage). Run with `cd web && npm test`.
-  - **Server:** JUnit in `server/src/test/kotlin`. Run with `cd server && ./gradlew test -PskipWeb` (needs `JAVA_HOME=/opt/homebrew/opt/openjdk@21`).
+  - **Server:** JUnit in `server/src/test/kotlin`. Run with `cd server && ./gradlew test -PskipWeb` (needs `JAVA_HOME=/opt/homebrew/opt/openjdk@25`).
 - **Before calling work done,** both suites pass.
 
 ## Git
