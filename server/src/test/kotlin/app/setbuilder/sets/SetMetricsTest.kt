@@ -93,7 +93,7 @@ class SetMetricsTest(
 
 	@Test
 	fun `new anonymous users are counted once`() {
-		val users = "setbuilder.users.created" to emptyArray<String>()
+		val users = "setbuilder.users.new" to emptyArray<String>()
 		assertEquals(listOf(1.0), deltas(users) { newUser() })
 		assertEquals(listOf(0.0), deltas(users) { mockMvc.get("/api/me") { cookie(me) } })
 	}

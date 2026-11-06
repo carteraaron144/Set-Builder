@@ -31,9 +31,9 @@ class CurrentUserResolver(
 	private val userRepository: ObjectProvider<UserRepository>,
 	private val meters: ObjectProvider<MeterRegistry>,
 ) : HandlerMethodArgumentResolver {
-	private val usersCreated by lazy {
-		meters.getIfAvailable()?.let { Counter.builder("setbuilder.users.created").description("Anonymous users created").register(it) }
-	}
+	// Registered at startup (null in web-only test slices, which have no registry).
+	private val usersCreated =
+		meters.getIfAvailable()?.let { Counter.builder("setbuilder.users.new").description("Anonymous users created").register(it) }
 
 	override fun supportsParameter(parameter: MethodParameter) = parameter.parameterType == CurrentUser::class.java
 
@@ -59,7 +59,7 @@ class CurrentUserResolver(
 	}
 }
 
-/** The repository and meter registry are looked up on first use so web-only test slices, which have no database, still load. */
+/** The repository is looked up per request so web-only test slices, which have no database, still load. */
 @Configuration
 class CurrentUserConfig(
 	private val users: ObjectProvider<UserRepository>,

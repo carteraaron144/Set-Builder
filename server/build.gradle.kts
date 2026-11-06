@@ -44,6 +44,8 @@ kotlin {
 tasks.withType<Test> {
 	useJUnitPlatform()
 	// Tests run against a separate local database so they never touch dev data.
+	// DashboardMetricsTest reads the Grafana dashboard, so editing it must rerun the tests.
+	inputs.dir("../ops/grafana/dashboards").withPropertyName("grafanaDashboards")
 	environment("SETBUILDER_DB_URL", System.getenv("SETBUILDER_TEST_DB_URL") ?: "jdbc:postgresql://localhost:5432/setbuilder_test")
 }
 

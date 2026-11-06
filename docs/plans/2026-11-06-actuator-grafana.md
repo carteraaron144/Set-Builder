@@ -32,7 +32,7 @@ Spring server ──/actuator/prometheus──▶ Prometheus (scrapes every 15 s
   | `setbuilder.sets.rejected` | counter | `reason` = `invalid` / `too-large` / `not-found` | a PUT is refused |
   | `setbuilder.sets.deleted` | counter | | a DELETE succeeds |
   | `setbuilder.set.file.bytes` | distribution summary (with percentiles histogram) | | each saved file's size |
-  | `setbuilder.users.created` | counter | | the resolver creates an anonymous user |
+  | `setbuilder.users.new` | counter | | the resolver creates an anonymous user (not `.created`: Prometheus reserves `_created`) |
 
   No per-user or per-set tags: unbounded tag values would blow up Prometheus.
 
