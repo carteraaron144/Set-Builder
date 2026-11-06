@@ -24,3 +24,25 @@ spring:
     multipart:
       max-file-size: 64MB
       max-request-size: 65MB
+
+---
+# Actuator: health and metrics on a separate, localhost-only port (no auth yet). Prometheus scrapes /actuator/prometheus.
+management:
+  server:
+    port: 8081
+    address: 127.0.0.1
+  endpoints:
+    web:
+      exposure:
+        include: health, info, metrics, prometheus
+  endpoint:
+    health:
+      show-details: always
+      probes:
+        enabled: true
+  metrics:
+    tags:
+      application: setbuilder
+    distribution:
+      percentiles-histogram:
+        http.server.requests: true
