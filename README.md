@@ -15,7 +15,7 @@ Editing, rendering and saving happen in the browser; the server serves the app a
 ## Run the server
 
 `cd server && ./gradlew bootRun` (port 8080). This builds the web app (`npm ci` + `npm run build` in `web/`) and serves it at
-http://localhost:8080, with `/api/health`, `/api/asset-packs` and `/packs/<id>/<path>`.
+http://localhost:8080, with `/api/sets`, `/api/asset-packs` and `/packs/<id>/<path>`. Health and metrics are on http://127.0.0.1:8081/actuator (see Monitoring).
 
 ## Development
 
