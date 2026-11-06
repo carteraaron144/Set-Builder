@@ -21,6 +21,7 @@ private fun SetEntity.toDto() = SetSummaryDto(id, name, size, updatedAt)
 @Service
 class SetService(
 	private val sets: SetRepository,
+	private val metrics: SetMetrics,
 	@Value("\${setbuilder.max-set-bytes:67108864}") private val maxSetBytes: Long,
 ) {
 	@Transactional(readOnly = true)
@@ -33,16 +34,22 @@ class SetService(
 	@Transactional
 	fun save(id: UUID, ownerId: UUID, meta: SetMeta, file: ByteArray): SetSummaryDto {
 		val name = meta.name.trim()
-		if (name.isEmpty() || name.length > MAX_NAME_LENGTH) throw badRequest("Name must be 1 to $MAX_NAME_LENGTH characters")
-		if (meta.size !in SET_SIZES) throw badRequest("Size must be one of $SET_SIZES")
-		if (file.isEmpty()) throw badRequest("The set file is empty")
-		if (file.size > maxSetBytes) throw ResponseStatusException(HttpStatus.CONTENT_TOO_LARGE, "The set file is too large")
+		if (name.isEmpty() || name.length > MAX_NAME_LENGTH) throw invalid("Name must be 1 to $MAX_NAME_LENGTH characters")
+		if (meta.size !in SET_SIZES) throw invalid("Size must be one of $SET_SIZES")
+		if (file.isEmpty()) throw invalid("The set file is empty")
+		if (file.size > maxSetBytes) {
+			metrics.rejected(SetMetrics.Rejection.TOO_LARGE)
+			throw ResponseStatusException(HttpStatus.CONTENT_TOO_LARGE, "The set file is too large")
+		}
 
 		val existing = sets.findById(id).orElse(null)
+		if (existing != null && existing.ownerId != ownerId) {
+			metrics.rejected(SetMetrics.Rejection.NOT_FOUND)
+			throw notFound()
+		}
 		val now = Instant.now()
-		val saved = when {
-			existing == null -> sets.save(SetEntity(id, ownerId, name, meta.size, now, file))
-			existing.ownerId != ownerId -> throw notFound()
+		val saved = when (existing) {
+			null -> sets.save(SetEntity(id, ownerId, name, meta.size, now, file))
 			else -> existing.apply {
 				this.name = name
 				this.size = meta.size
@@ -50,14 +57,19 @@ class SetService(
 				this.file = file
 			}
 		}
+		metrics.saved(created = existing == null, bytes = file.size)
 		return saved.toDto()
 	}
 
 	@Transactional
 	fun delete(id: UUID, ownerId: UUID) {
 		if (sets.deleteByIdAndOwnerId(id, ownerId) == 0L) throw notFound()
+		metrics.deleted()
 	}
 
 	private fun notFound() = ResponseStatusException(HttpStatus.NOT_FOUND, "Set not found")
-	private fun badRequest(reason: String) = ResponseStatusException(HttpStatus.BAD_REQUEST, reason)
+	private fun invalid(reason: String): ResponseStatusException {
+		metrics.rejected(SetMetrics.Rejection.INVALID)
+		return ResponseStatusException(HttpStatus.BAD_REQUEST, reason)
+	}
 }
