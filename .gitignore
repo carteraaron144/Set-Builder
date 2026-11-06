@@ -8,3 +8,4 @@ build/
 *.iml
 .kotlin/
 server/src/main/resources/static/
+ops/.data/

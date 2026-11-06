@@ -1,0 +1,9 @@
+apiVersion: 1
+providers:
+  - name: set-builder
+    folder: Set Builder
+    type: file
+    # UI edits are allowed but only last until restart: export the JSON back to ops/grafana/dashboards to keep them.
+    allowUiUpdates: true
+    options:
+      path: $SETBUILDER_OPS/grafana/dashboards

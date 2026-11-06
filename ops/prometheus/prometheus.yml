@@ -1,0 +1,10 @@
+# Scrapes the Set Builder server's Actuator endpoint. Started by scripts/metrics.sh.
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: setbuilder
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: ["127.0.0.1:8081"]

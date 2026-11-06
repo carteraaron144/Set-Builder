@@ -15,7 +15,7 @@ Editing, rendering and saving happen in the browser; the server serves the app a
 ## Run the server
 
 `cd server && ./gradlew bootRun` (port 8080). This builds the web app (`npm ci` + `npm run build` in `web/`) and serves it at
-http://localhost:8080, with `/api/health`, `/api/asset-packs` and `/packs/<id>/<path>`.
+http://localhost:8080, with `/api/sets`, `/api/asset-packs` and `/packs/<id>/<path>`. Health and metrics are on http://127.0.0.1:8081/actuator (see Monitoring).
 
 ## Development
 
@@ -104,6 +104,19 @@ merged. Check an export in Blender (5.2 wires the terrain's vertex colours autom
 ## Production build
 
 `cd server && ./gradlew bootJar`, then `java -jar build/libs/setbuilder-0.0.1-SNAPSHOT.jar` from `server/`.
+
+## Monitoring
+
+The server exposes Spring Boot Actuator on a separate, localhost-only port: health at
+http://127.0.0.1:8081/actuator/health (includes the Postgres check) and metrics for Prometheus at
+http://127.0.0.1:8081/actuator/prometheus.
+
+To see them in Grafana: `brew install prometheus grafana`, start the server, then run `./scripts/metrics.sh`.
+Prometheus is at http://127.0.0.1:9090 and Grafana at http://127.0.0.1:3000, which opens on the Set Builder dashboard
+(view without logging in; log in as admin/admin to edit). On the very first run Grafana downloads its Prometheus
+plugin, so the panels can take a minute to fill. Configs live in `ops/`, and data in `ops/.data/` (gitignored).
+To keep dashboard edits made in Grafana, export the JSON over `ops/grafana/dashboards/set-builder.json`; a server test
+checks every metric it uses is exported.
 
 ## Asset packs
 

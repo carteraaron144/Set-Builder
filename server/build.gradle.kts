@@ -27,6 +27,8 @@ dependencies {
 	implementation("org.springframework.boot:spring-boot-starter-flyway")
 	implementation("org.flywaydb:flyway-database-postgresql")
 	runtimeOnly("org.postgresql:postgresql")
+	implementation("org.springframework.boot:spring-boot-starter-actuator")
+	runtimeOnly("io.micrometer:micrometer-registry-prometheus")
 	testImplementation("org.springframework.boot:spring-boot-starter-webmvc-test")
 	testImplementation("org.springframework.boot:spring-boot-starter-data-jpa-test")
 	testImplementation("org.jetbrains.kotlin:kotlin-test-junit5")
@@ -42,6 +44,8 @@ kotlin {
 tasks.withType<Test> {
 	useJUnitPlatform()
 	// Tests run against a separate local database so they never touch dev data.
+	// DashboardMetricsTest reads the Grafana dashboard, so editing it must rerun the tests.
+	inputs.dir("../ops/grafana/dashboards").withPropertyName("grafanaDashboards")
 	environment("SETBUILDER_DB_URL", System.getenv("SETBUILDER_TEST_DB_URL") ?: "jdbc:postgresql://localhost:5432/setbuilder_test")
 }
 

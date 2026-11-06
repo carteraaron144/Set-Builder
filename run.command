@@ -6,11 +6,12 @@
 ROOT="${0:A:h}"
 export JAVA_HOME="${JAVA_HOME:-/opt/homebrew/opt/openjdk@25}"
 API="http://localhost:8080"
+HEALTH="http://127.0.0.1:8081/actuator/health/readiness"
 URL="http://localhost:5173"
 PIDS=()
 trap 'kill $PIDS 2>/dev/null' EXIT INT TERM
 
-if curl -sf "$API/api/health" >/dev/null; then
+if curl -sf "$HEALTH" >/dev/null; then
   echo "The API server is already running at $API."
 else
   (cd "$ROOT/server" && exec ./gradlew bootRun -PskipWeb) &
@@ -27,7 +28,7 @@ else
 fi
 
 echo "Waiting for the servers..."
-until curl -sf "$API/api/health" >/dev/null && curl -sf "$URL" >/dev/null; do
+until curl -sf "$HEALTH" >/dev/null && curl -sf "$URL" >/dev/null; do
   for pid in $PIDS; do
     if ! kill -0 $pid 2>/dev/null; then
       echo "A server stopped before it came up."
