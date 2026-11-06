@@ -105,6 +105,19 @@ merged. Check an export in Blender (5.2 wires the terrain's vertex colours autom
 
 `cd server && ./gradlew bootJar`, then `java -jar build/libs/setbuilder-0.0.1-SNAPSHOT.jar` from `server/`.
 
+## Monitoring
+
+The server exposes Spring Boot Actuator on a separate, localhost-only port: health at
+http://127.0.0.1:8081/actuator/health (includes the Postgres check) and metrics for Prometheus at
+http://127.0.0.1:8081/actuator/prometheus.
+
+To see them in Grafana: `brew install prometheus grafana`, start the server, then run `./scripts/metrics.sh`.
+Prometheus is at http://127.0.0.1:9090 and Grafana at http://127.0.0.1:3000, which opens on the Set Builder dashboard
+(view without logging in; log in as admin/admin to edit). On the very first run Grafana downloads its Prometheus
+plugin, so the panels can take a minute to fill. Configs live in `ops/`, and data in `ops/.data/` (gitignored).
+To keep dashboard edits made in Grafana, export the JSON over `ops/grafana/dashboards/set-builder.json`; a server test
+checks every metric it uses is exported.
+
 ## Asset packs
 
 A pack is a directory `packs/<id>/` with a `pack.json` (`{"name": "...", "version": "..."}`).
